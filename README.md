@@ -17,8 +17,8 @@ Convert scanned or photographed pdf books to clean, reader-optimized EPUB files 
 
 - Python 3.8 or higher
 - Azure AI account with access to:
-  - Azure AI Content Understanding service
-  - Azure OpenAI/GPT service
+  - Azure AI Document Intelligence (for OCR)
+  - Azure OpenAI/GPT service (for cleanup)
 - Required Python packages (see `requirements.txt`)
 
 ## Installation
@@ -42,16 +42,16 @@ pip install -r requirements.txt
 
 ### Basic Usage
 
-Convert a scanned PDF book to EPUB:
+Convert a scanned PDF book (from a publicly accessible URL) to EPUB:
 ```bash
-python scan2epub.py input.pdf output.epub
+python scan2epub.py https://example.com/input.pdf output.epub
 ```
 
 ### Advanced Usage
 
 Run only the OCR stage (to keep the original structure, layout, typesetting of the book):
 ```bash
-python scan2epub.py input.pdf output.epub --ocr-only
+python scan2epub.py https://example.com/input.pdf output.epub --ocr-only
 ```
 
 Run only the cleanup stage on an existing OCR'd EPUB you have found on internet:
@@ -65,7 +65,7 @@ python scan2epub.py input.epub output.epub --cleanup-only
 python scan2epub.py INPUT OUTPUT [OPTIONS]
 
 Arguments:
-  INPUT   Input file (PDF for full pipeline, EPUB for cleanup only)
+  INPUT   Input file (PDF URL for full pipeline, EPUB for cleanup only)
   OUTPUT  Output EPUB file path
 
 Options:
@@ -79,7 +79,7 @@ Options:
 ## How It Works
 
 ### Stage 1: OCR Processing
-- Uses Azure AI Content Understanding to extract text from scanned/photographed PDF pages
+- Uses Azure AI Content Understanding to extract text from scanned/photographed PDF pages (provided via publicly accessible URL)
 - Maintains original document structure (paragraphs, line breaks, page breaks)
 - Preserves word divisions and hyphenation from the original text
 - Creates an initial EPUB with raw OCR output
@@ -93,9 +93,9 @@ Options:
 
 ## Examples
 
-### Converting a scanned academic book:
+### Converting a scanned academic book (from URL):
 ```bash
-python scan2epub.py scanned_textbook.pdf clean_textbook.epub
+python scan2epub.py https://example.com/scanned_textbook.pdf clean_textbook.epub
 ```
 
 ### Cleaning up an existing OCR'd file:
