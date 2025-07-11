@@ -562,8 +562,8 @@ def main():
     parser = argparse.ArgumentParser(
         description='Convert scanned PDFs to clean EPUBs or clean existing EPUBs using Azure AI.'
     )
-    parser.add_argument('input_file', help='Path to input file (PDF file or URL for OCR, EPUB for cleanup)')
-    parser.add_argument('output_file', help='Path to output EPUB file')
+    parser.add_argument('input_file', nargs='?', help='Path to input file (PDF file or URL for OCR, EPUB for cleanup)')
+    parser.add_argument('output_file', nargs='?', help='Path to output EPUB file')
     parser.add_argument('--ocr-only', action='store_true', 
                         help='Run only the OCR stage (PDF to EPUB conversion)')
     parser.add_argument('--cleanup-only', action='store_true', 
@@ -578,8 +578,22 @@ def main():
                         help='Save interim results to disk to reduce memory usage (for cleanup stage)')
     parser.add_argument('--config', type=str, default=None,
                         help='Path to configuration file (default: scan2epub.ini)')
+    parser.add_argument('--azure-test', action='store_true',
+                        help='Run Azure configuration tests and exit')
     
     args = parser.parse_args()
+
+    # Handle Azure configuration testing
+    if args.azure_test:
+        from azure_config_tester import AzureConfigTester
+        print("Running Azure configuration tests...")
+        tester = AzureConfigTester()
+        success = tester.run_all_tests()
+        return 0 if success else 1
+
+    # Validate required arguments when not running tests
+    if not args.input_file or not args.output_file:
+        parser.error("input_file and output_file are required unless using --azure-test")
 
     # Load configuration
     config = ConfigManager(args.config)

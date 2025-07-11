@@ -106,8 +106,25 @@ Options:
   --debug           Enable debug output
   --save-interim    Save interim results to disk (reduces memory usage)
   --config PATH     Path to configuration file (default: scan2epub.ini)
+  --azure-test      Run Azure configuration tests and exit
   --help            Show this help message
 ```
+
+### Testing Azure Configuration
+
+Before processing files, you can verify your Azure setup:
+
+```bash
+python scan2epub.py --azure-test
+```
+
+This will test:
+- Environment variables and configuration
+- Azure Blob Storage connectivity
+- Azure Content Understanding API
+- Azure OpenAI API
+
+The test provides detailed diagnostics and recommendations for any issues found.
 
 ## How It Works
 

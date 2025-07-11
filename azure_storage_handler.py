@@ -164,7 +164,11 @@ class AzureStorageHandler:
                 self.delete_blob(blob_name)
             except:
                 pass
-            raise Exception(f"Failed to upload file: {str(e)}")
+            # Add more context to the error
+            if "Incorrect padding" in str(e):
+                raise Exception(f"Failed to generate SAS URL: {str(e)}")
+            else:
+                raise Exception(f"Failed to upload file: {str(e)}")
     
     def _generate_sas_url(self, blob_name: str) -> str:
         """
@@ -196,15 +200,28 @@ class AzureStorageHandler:
         if not account_key:
             raise ValueError("Could not extract account key from connection string")
         
-        # Generate SAS token
-        sas_token = generate_blob_sas(
-            account_name=account_name,
-            container_name=self.container_name,
-            blob_name=blob_name,
-            account_key=account_key,
-            permission=BlobSasPermissions(read=True),
-            expiry=datetime.utcnow() + timedelta(hours=self.config.sas_token_expiry_hours)
-        )
+        # Debug: Check if account key ends with == (common issue)
+        if self.config.debug:
+            print(f"DEBUG: Account key length: {len(account_key)}")
+            print(f"DEBUG: Account key ends with: ...{account_key[-10:]}")
+        
+        try:
+            # Generate SAS token
+            sas_token = generate_blob_sas(
+                account_name=account_name,
+                container_name=self.container_name,
+                blob_name=blob_name,
+                account_key=account_key,
+                permission=BlobSasPermissions(read=True),
+                expiry=datetime.utcnow() + timedelta(hours=self.config.sas_token_expiry_hours)
+            )
+        except Exception as e:
+            if "Incorrect padding" in str(e):
+                raise ValueError(
+                    "Invalid account key format. Please check your AZURE_STORAGE_CONNECTION_STRING in .env file. "
+                    "Make sure the AccountKey part ends with '==' and there are no extra spaces or line breaks."
+                )
+            raise
         
         # Construct full URL
         blob_url = f"https://{account_name}.blob.core.windows.net/{self.container_name}/{quote(blob_name)}"
