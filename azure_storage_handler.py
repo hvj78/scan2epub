@@ -88,7 +88,7 @@ class AzureStorageHandler:
         # Sanitize filename for Azure
         safe_name = "".join(c for c in original_name if c.isalnum() or c in "._-")
         return f"{timestamp}_{safe_name}"
-    
+
     def upload_pdf(self, local_path: str) -> str:
         """
         Upload a local PDF file to Azure Blob Storage
@@ -184,7 +184,7 @@ class AzureStorageHandler:
         account_name = None
         for part in self.connection_string.split(';'):
             if part.startswith('AccountName='):
-                account_name = part.split('=')[1]
+                account_name = part.split('=', 1)[1]
                 break
         
         if not account_name:
@@ -194,17 +194,22 @@ class AzureStorageHandler:
         account_key = None
         for part in self.connection_string.split(';'):
             if part.startswith('AccountKey='):
-                account_key = part.split('=')[1]
+                account_key = part.split('=', 1)[1]
                 break
         
         if not account_key:
             raise ValueError("Could not extract account key from connection string")
-        
+
         # Debug: Check if account key ends with == (common issue)
         if self.config.debug:
             print(f"DEBUG: Account key length: {len(account_key)}")
             print(f"DEBUG: Account key ends with: ...{account_key[-10:]}")
         
+        # Add a check for typical Azure Storage account key length (88 characters)
+        if len(account_key) != 88:
+            print(f"WARNING: AccountKey length is {len(account_key)}. Azure Storage account keys are typically 88 characters long. "
+                  "This might indicate an issue with the key itself.")
+
         try:
             # Generate SAS token
             sas_token = generate_blob_sas(
@@ -219,7 +224,7 @@ class AzureStorageHandler:
             if "Incorrect padding" in str(e):
                 raise ValueError(
                     "Invalid account key format. Please check your AZURE_STORAGE_CONNECTION_STRING in .env file. "
-                    "Make sure the AccountKey part ends with '==' and there are no extra spaces or line breaks."
+                    "Make sure the AccountKey part is correct and consider regenerating it from the Azure portal."
                 )
             raise
         

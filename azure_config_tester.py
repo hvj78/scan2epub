@@ -21,6 +21,7 @@ import openai
 from azure.storage.blob import BlobServiceClient, BlobSasPermissions, generate_blob_sas
 from azure.core.exceptions import AzureError
 from dotenv import load_dotenv
+import binascii # Added for binascii.Error handling
 
 # Local imports
 from config_manager import ConfigManager
@@ -216,9 +217,9 @@ class AzureConfigTester:
             account_key = None
             for part in conn_string.split(';'):
                 if part.startswith('AccountName='):
-                    account_name = part.split('=')[1]
+                    account_name = part.split('=', 1)[1]
                 elif part.startswith('AccountKey='):
-                    account_key = part.split('=')[1]
+                    account_key = part.split('=', 1)[1]
             
             if account_name and account_key:
                 sas_token = generate_blob_sas(
@@ -255,6 +256,10 @@ class AzureConfigTester:
                 self.print_recommendation("Verify your storage account name and that it exists")
             elif "Forbidden" in str(e):
                 self.print_recommendation("Check firewall settings and IP restrictions on your storage account")
+            success = False
+        except binascii.Error as e:
+            self.print_error(f"Base64 decoding error with account key: {str(e)}")
+            self.print_recommendation("Ensure your AZURE_STORAGE_CONNECTION_STRING's AccountKey is correctly Base64 encoded and padded.")
             success = False
         except Exception as e:
             self.print_error(f"Unexpected error: {str(e)}")
