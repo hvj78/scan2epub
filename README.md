@@ -8,10 +8,12 @@ Convert scanned or photographed pdf books to clean, reader-optimized EPUB files 
   1. **OCR Stage**: Extract text from scanned/photographed PDF books using Azure AI Content Understanding service while preserving original structure (page breaks, line breaks, word divisions)
   2. **Cleanup Stage**: Remove OCR artifacts and optimize layout for ebook readers using Azure GPT, creating a clean reading experience
 
+- **Local PDF file support** (NEW!): Process PDF files directly from your computer without manual upload
 - **Preserves book structure** during initial OCR
 - **Optimizes for ebook readers** by removing print-specific formatting
 - **Azure AI integration** for high-quality OCR and text processing
 - **Supports both workflows**: Direct PDF-to-EPUB conversion or cleanup of existing OCR'd EPUB files
+- **Configurable settings** via INI file for easy customization
 
 ## Prerequisites
 
@@ -19,6 +21,7 @@ Convert scanned or photographed pdf books to clean, reader-optimized EPUB files 
 - Azure AI account with access to:
   - Azure AI Document Intelligence (for OCR)
   - Azure OpenAI/GPT service (for cleanup)
+  - Azure Blob Storage (for local PDF file support)
 - Required Python packages (see `requirements.txt`)
 
 ## Installation
@@ -36,14 +39,41 @@ pip install -r requirements.txt
 
 3. Set up Azure credentials in a .env file:
 - copy .env.template .env
-- add your API keys and Azure AI service parameters to the .env file, follow the commends in the file!
+- add your API keys and Azure AI service parameters to the .env file, follow the comments in the file!
+
+## Configuration
+
+The tool can be configured using the `scan2epub.ini` file. A default configuration file is created automatically on first run.
+
+### Configuration Options
+
+```ini
+[Storage]
+max_file_size_mb = 256        # Maximum size for local PDF uploads
+blob_container_name = scan2epub-temp  # Azure container name
+sas_token_expiry_hours = 1    # URL expiration time
+
+[Processing]
+debug = false                 # Enable debug output
+save_interim = false          # Save interim results to disk
+
+[Cleanup]
+cleanup_on_failure = true     # Clean up Azure files even on failure
+log_cleanup = true            # Log cleanup operations
+```
+
+For detailed configuration and local PDF support documentation, see [docs/local-pdf-support.md](docs/local-pdf-support.md).
 
 ## Usage
 
 ### Basic Usage
 
-Convert a scanned PDF book (from a publicly accessible URL) to EPUB:
+Convert a scanned PDF book to EPUB:
 ```bash
+# From a local PDF file (NEW!)
+python scan2epub.py my_book.pdf output.epub
+
+# From a publicly accessible URL
 python scan2epub.py https://example.com/input.pdf output.epub
 ```
 
@@ -65,24 +95,30 @@ python scan2epub.py input.epub output.epub --cleanup-only
 python scan2epub.py INPUT OUTPUT [OPTIONS]
 
 Arguments:
-  INPUT   Input file (PDF URL for full pipeline, EPUB for cleanup only)
+  INPUT   Input file (PDF file or URL for OCR, EPUB for cleanup only)
   OUTPUT  Output EPUB file path
 
 Options:
   --ocr-only        Run only the OCR stage
   --cleanup-only    Run only the cleanup stage
-  --preserve-images Include images in the output EPUB
-  --language LANG   Set OCR language (default: auto-detect)
+  --preserve-images Include images in the output EPUB (not yet implemented)
+  --language LANG   Set OCR language (default: Hungarian)
+  --debug           Enable debug output
+  --save-interim    Save interim results to disk (reduces memory usage)
+  --config PATH     Path to configuration file (default: scan2epub.ini)
   --help            Show this help message
 ```
 
 ## How It Works
 
 ### Stage 1: OCR Processing
-- Uses Azure AI Content Understanding to extract text from scanned/photographed PDF pages (provided via publicly accessible URL)
+- Accepts both local PDF files and publicly accessible URLs
+- For local files: automatically uploads to temporary Azure Blob Storage
+- Uses Azure AI Content Understanding to extract text from scanned/photographed PDF pages
 - Maintains original document structure (paragraphs, line breaks, page breaks)
 - Preserves word divisions and hyphenation from the original text
 - Creates an initial EPUB with raw OCR output
+- Automatically cleans up temporary files after processing
 
 ### Stage 2: Cleanup Processing
 - Uses Azure GPT to analyze and clean OCR artifacts
@@ -93,6 +129,11 @@ Options:
 
 ## Examples
 
+### Converting a local scanned book:
+```bash
+python scan2epub.py my_scanned_book.pdf clean_book.epub
+```
+
 ### Converting a scanned academic book (from URL):
 ```bash
 python scan2epub.py https://example.com/scanned_textbook.pdf clean_textbook.epub
@@ -101,6 +142,11 @@ python scan2epub.py https://example.com/scanned_textbook.pdf clean_textbook.epub
 ### Cleaning up an existing OCR'd file:
 ```bash
 python scan2epub.py messy_ocr.epub clean_book.epub --cleanup-only
+```
+
+### Processing with custom configuration:
+```bash
+python scan2epub.py --config my_settings.ini --debug book.pdf output.epub
 ```
 
 ## Contributing

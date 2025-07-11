@@ -30,6 +30,8 @@ from tqdm import tqdm
 # Local imports
 from pdf_ocr_processor import PDFOCRProcessor
 from epub_builder import EPUBBuilder
+from config_manager import ConfigManager
+from azure_storage_handler import AzureStorageHandler
 
 # Load environment variables
 load_dotenv()
@@ -560,7 +562,7 @@ def main():
     parser = argparse.ArgumentParser(
         description='Convert scanned PDFs to clean EPUBs or clean existing EPUBs using Azure AI.'
     )
-    parser.add_argument('input_file', help='Path to input file (PDF URL for OCR, EPUB for cleanup)')
+    parser.add_argument('input_file', help='Path to input file (PDF file or URL for OCR, EPUB for cleanup)')
     parser.add_argument('output_file', help='Path to output EPUB file')
     parser.add_argument('--ocr-only', action='store_true', 
                         help='Run only the OCR stage (PDF to EPUB conversion)')
@@ -568,14 +570,27 @@ def main():
                         help='Run only the cleanup stage (EPUB to cleaned EPUB)')
     parser.add_argument('--preserve-images', action='store_true', 
                         help='(Not yet implemented) Include images in the output EPUB during OCR stage')
-    parser.add_argument('--language', type=str, default='auto', 
-                        help='(Not yet implemented) Set OCR language (default: auto-detect)')
+    parser.add_argument('--language', type=str, default='hu', 
+                        help='Set OCR language (default: Hungarian)')
     parser.add_argument('--debug', action='store_true', 
                         help='Enable debug output to troubleshoot issues')
     parser.add_argument('--save-interim', action='store_true', 
                         help='Save interim results to disk to reduce memory usage (for cleanup stage)')
+    parser.add_argument('--config', type=str, default=None,
+                        help='Path to configuration file (default: scan2epub.ini)')
     
     args = parser.parse_args()
+
+    # Load configuration
+    config = ConfigManager(args.config)
+    
+    # Apply debug setting from command line or config
+    if args.debug or config.debug:
+        args.debug = True
+    
+    # Apply save_interim setting from command line or config
+    if args.save_interim or config.save_interim:
+        args.save_interim = True
 
     input_ext = Path(args.input_file).suffix.lower()
     output_ext = Path(args.output_file).suffix.lower()
@@ -588,22 +603,39 @@ def main():
         print("Error: Cannot use --ocr-only and --cleanup-only simultaneously.")
         return 1
 
+    # Initialize Azure storage handler for potential cleanup
+    storage_handler = None
+    try:
+        storage_handler = AzureStorageHandler(config)
+    except ValueError as e:
+        # Only fail if we need to upload files
+        if input_ext == '.pdf' and not args.input_file.startswith(('http://', 'https://')):
+            print(f"Error: {e}")
+            print("Azure Storage is required for local PDF files.")
+            return 1
+
     try:
         if args.ocr_only:
             if input_ext != '.pdf':
                 print("Error: --ocr-only mode requires a PDF input file.")
                 return 1
             
-            print(f"Running OCR only: {args.input_file} (URL) -> {args.output_file}")
+            # Determine if input is URL or local file
+            pdf_url = args.input_file
+            if not storage_handler.is_url(args.input_file):
+                # Local file - upload to Azure
+                print(f"Detected local PDF file: {args.input_file}")
+                pdf_url = storage_handler.upload_pdf(args.input_file)
+            
+            print(f"Running OCR only: {args.input_file} -> {args.output_file}")
             pdf_processor = PDFOCRProcessor()
-            # The input_file is now expected to be a URL for PDF processing
-            ocr_result = pdf_processor.process_pdf(args.input_file)
+            ocr_result = pdf_processor.process_pdf(pdf_url)
             extracted_text = pdf_processor.extract_text_from_ocr_result(ocr_result)
 
-            # Basic metadata extraction from PDF (can be enhanced)
+            # Basic metadata extraction
             title = Path(args.input_file).stem
-            author = "Unknown" # Placeholder, can be extracted from PDF metadata
-            language = args.language if args.language != 'auto' else 'en' # Default to English if auto-detect not implemented
+            author = "Unknown"
+            language = args.language
 
             epub_builder = EPUBBuilder()
             epub_builder.set_metadata(title=title, author=author, language=language)
@@ -626,21 +658,27 @@ def main():
                 print("Error: Full pipeline requires a PDF input file.")
                 return 1
             
-            print(f"Running full pipeline: {args.input_file} (URL) -> {args.output_file}")
+            # Determine if input is URL or local file
+            pdf_url = args.input_file
+            if storage_handler and not storage_handler.is_url(args.input_file):
+                # Local file - upload to Azure
+                print(f"Detected local PDF file: {args.input_file}")
+                pdf_url = storage_handler.upload_pdf(args.input_file)
+            
+            print(f"Running full pipeline: {args.input_file} -> {args.output_file}")
             
             # Step 1: OCR PDF and convert to interim EPUB
             interim_epub_path = Path(args.output_file).with_stem(Path(args.output_file).stem + "_interim_ocr").with_suffix(".epub")
             
-            print(f"Step 1/2: Performing OCR on PDF (from URL) and creating interim EPUB: {interim_epub_path}")
+            print(f"Step 1/2: Performing OCR on PDF and creating interim EPUB: {interim_epub_path}")
             pdf_processor = PDFOCRProcessor()
-            # The input_file is now expected to be a URL for PDF processing
-            ocr_result = pdf_processor.process_pdf(args.input_file)
+            ocr_result = pdf_processor.process_pdf(pdf_url)
             extracted_text = pdf_processor.extract_text_from_ocr_result(ocr_result)
 
-            # Basic metadata extraction from PDF (can be enhanced)
+            # Basic metadata extraction
             title = Path(args.input_file).stem
-            author = "Unknown" # Placeholder, can be extracted from PDF metadata
-            language = args.language if args.language != 'auto' else 'en' # Default to English if auto-detect not implemented
+            author = "Unknown"
+            language = args.language
 
             epub_builder = EPUBBuilder()
             epub_builder.set_metadata(title=title, author=author, language=language)
@@ -665,6 +703,13 @@ def main():
     except Exception as e:
         print(f"Error: {str(e)}")
         return 1
+    finally:
+        # Always clean up Azure storage
+        if storage_handler and config.cleanup_on_failure:
+            successful, failed = storage_handler.cleanup_all()
+            if failed > 0:
+                print(f"Warning: Failed to clean up {failed} temporary file(s) from Azure")
+
 
 if __name__ == "__main__":
     exit(main())
