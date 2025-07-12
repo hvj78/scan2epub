@@ -184,7 +184,7 @@ You can freely do whatever you want with this codebase, just add a note that the
 - Azure OpenAI for text processing and cleanup
 - The open source community for EPUB processing libraries
 - The Cline plugin for VSCode made it possible — without it, I wouldn’t have had time to write the code line by line.
-- Claude Sonnet 4 and Google Gemini 2.5 Flash models for clever thinking and cost-wise acting in Cline
+- Claude Opus & Sonnet 4 and Google Gemini 2.5 Flash models for clever thinking and cost-wise acting in Cline, and Grok 4 to solve issues, that none of those LLMs could solve.
 
 ## Support
 
