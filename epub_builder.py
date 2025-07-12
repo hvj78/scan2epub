@@ -16,6 +16,7 @@ class EPUBBuilder:
         self.book.set_title(title)
         self.book.set_language(language)
         self.book.add_author(author)
+        self.language = language # Store language as an instance variable
 
     def add_chapter(self, title: str, content: str, file_name: str = None):
         """Adds a chapter to the EPUB book."""
@@ -25,7 +26,7 @@ class EPUBBuilder:
             if not file_name: # Fallback if title is empty or only special chars
                 file_name = f'chapter_{len(self.chapters) + 1}.xhtml'
 
-        chapter = epub.EpubHtml(title=title, file_name=file_name, lang=self.book.lang)
+        chapter = epub.EpubHtml(title=title, file_name=file_name, lang=self.language)
         
         # Basic HTML wrapping for the content
         html_content = f"""<?xml version='1.0' encoding='utf-8'?>

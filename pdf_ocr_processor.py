@@ -36,61 +36,6 @@ class PDFOCRProcessor:
         # For simplicity, this example assumes a publicly accessible URL or a local file
         # that can be read as bytes. If you need to upload, consider Azure Blob Storage.
         
-        # For now, let's assume we're sending the file content directly for analysis
-        # This might be limited by request size, for large files, a URL is preferred.
-        
-        # Read file as bytes
-        with open(pdf_path, "rb") as f:
-            file_content = f.read()
-
-        # Content Understanding API expects a URL for analysis.
-        # For local files, you'd typically upload them to a temporary storage (e.g., Azure Blob Storage)
-        # and then provide the URL.
-        # For this example, we'll simulate by assuming the file can be sent as a stream or
-        # that a URL is provided. The quickstart uses a URL.
-        # Let's adapt to use a local file by sending it as binary data if the API supports it,
-        # or by requiring a URL. The quickstart shows URL.
-        
-        # The quickstart example uses a URL in the request body.
-        # To process a local file, you would need to upload it to a publicly accessible location
-        # (e.g., Azure Blob Storage with SAS token) and then pass that URL.
-        # For demonstration, let's assume `pdf_path` can be treated as a URL if it starts with http/https,
-        # otherwise, we'll raise an error or implement a simple upload mechanism (out of scope for now).
-        
-        # For now, let's assume the input `pdf_path` is a local file and we need to send its content.
-        # The Content Understanding API's `analyze` endpoint expects a JSON body with a `url` field.
-        # This means direct file upload via the `analyze` endpoint is not the primary method.
-        # We need to provide a publicly accessible URL.
-        
-        # To make this work with local files, we'd need an intermediate step to upload the file.
-        # For the purpose of this exercise, let's modify the `process_pdf` to accept a URL directly,
-        # or assume a pre-uploaded file.
-        # Given the quickstart, the simplest is to expect a URL.
-        
-        # Let's revert to the quickstart's method: expecting a URL.
-        # If the user provides a local path, they need to handle uploading it first.
-        
-        # For now, let's assume `pdf_path` is a URL.
-        # If it's a local file, the user needs to upload it first.
-        
-        # Re-reading the quickstart:
-        # curl -i -X POST "{endpoint}/contentunderstanding/analyzers/{analyzerId}:analyze?api-version=2025-05-01-preview" \
-        #   -H "Ocp-Apim-Subscription-Key: {key}" \
-        #   -H "Content-Type: application/json" \
-        #   -d "{\"url\":\"{fileUrl}\"}"
-        
-        # This clearly indicates the API expects a URL.
-        # So, the `process_pdf` method should either take a URL, or we need to implement
-        # a file upload mechanism (e.g., to Azure Blob Storage) within this class.
-        # For simplicity and direct migration, let's assume `pdf_path` is a URL for now.
-        # If it's a local file, the user needs to pre-upload it.
-        
-        # Let's adjust the `process_pdf` signature to reflect this, or add a note.
-        # For now, I'll make a placeholder for local file handling.
-        
-        # For the sake of completing the migration, I will assume the `pdf_path` provided
-        # to `process_pdf` is a publicly accessible URL.
-        
         json_data = {"url": pdf_path}
         
         try:
@@ -110,8 +55,8 @@ class PDFOCRProcessor:
         """
         result_url = f"{self.endpoint}/contentunderstanding/analyzerResults/{operation_id}?api-version={self.api_version}"
         
-        max_retries = int(os.getenv('MAX_RETRIES', 30)) # Increased retries for async operation
-        retry_delay = int(os.getenv('RETRY_DELAY', 5)) # Increased delay
+        max_retries = 60 # Increased retries for async operation
+        retry_delay = 10 # Increased delay
         
         for attempt in range(max_retries):
             try:
