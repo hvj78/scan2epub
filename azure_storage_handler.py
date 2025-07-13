@@ -24,14 +24,18 @@ load_dotenv()
 class AzureStorageHandler:
     """Handles Azure Blob Storage operations for temporary PDF storage"""
     
-    def __init__(self, config_manager):
+    def __init__(self, config_manager, debug_mode: bool = False, debug_dir: Optional[Path] = None):
         """
         Initialize Azure Storage Handler
         
         Args:
             config_manager: ConfigManager instance for settings
+            debug_mode: True if debug mode is enabled
+            debug_dir: Path to the debug directory for saving interim files
         """
         self.config = config_manager
+        self.debug_mode = debug_mode
+        self.debug_dir = debug_dir
         self.connection_string = os.getenv('AZURE_STORAGE_CONNECTION_STRING')
         
         if not self.connection_string:
@@ -289,6 +293,70 @@ class AzureStorageHandler:
         
         return successful, failed
     
+    def download_all_blobs(self, download_dir: Path) -> Tuple[int, int]:
+        """
+        Download all uploaded blobs to a specified directory.
+        
+        Args:
+            download_dir: The directory where blobs should be downloaded.
+            
+        Returns:
+            Tuple of (successful_downloads, failed_downloads)
+        """
+        if not self.uploaded_blobs:
+            print("No temporary blobs to download.")
+            return 0, 0
+        
+        # In debug mode, we only want to download blobs that were *not* originally local files.
+        # The user already has the original local PDF.
+        blobs_to_download = [
+            blob_name for blob_name in self.uploaded_blobs
+            if not self.is_local_file_blob(blob_name) # Assuming a method to check if it was a local file
+        ]
+
+        if not blobs_to_download:
+            print("No temporary blobs to download (excluding original local files).")
+            return 0, 0
+        
+        print(f"Downloading {len(blobs_to_download)} temporary file(s) from Azure to {download_dir}...")
+        
+        successful = 0
+        failed = 0
+        
+        download_dir.mkdir(parents=True, exist_ok=True) # Ensure the directory exists
+        
+        for blob_name in blobs_to_download:
+            try:
+                blob_client = self.blob_service_client.get_blob_client(
+                    container=self.container_name,
+                    blob=blob_name
+                )
+                download_file_path = download_dir / blob_name
+                
+                with open(download_file_path, "wb") as download_file:
+                    download_file.write(blob_client.download_blob().readall())
+                
+                print(f"Downloaded blob: {blob_name} to {download_file_path}")
+                successful += 1
+            except Exception as e:
+                print(f"Failed to download blob {blob_name}: {str(e)}")
+                failed += 1
+        
+        print(f"Download completed: {successful} downloaded, {failed} failed")
+        return successful, failed
+
+    def is_local_file_blob(self, blob_name: str) -> bool:
+        """
+        Determines if a blob was uploaded from a local file.
+        This is a placeholder and needs a more robust implementation if needed.
+        For now, we assume any blob uploaded via upload_pdf is a local file.
+        """
+        # In a more complex scenario, you might store metadata with the blob
+        # or maintain a mapping of original local paths to blob names.
+        # For this task, we'll assume all blobs in self.uploaded_blobs originated from local files
+        # that the user already possesses.
+        return True # For now, assume all uploaded blobs are from local files.
+
     def is_url(self, path: str) -> bool:
         """
         Check if a path is a URL (http/https)

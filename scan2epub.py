@@ -20,6 +20,20 @@ from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass
 
+# Helper for debug directory creation
+def _get_unique_debug_dir(base_path: Path) -> Path:
+    """
+    Generates a unique directory path for debug files.
+    If the base path exists, appends a counter (e.g., _1, _2) until a unique path is found.
+    """
+    debug_dir = base_path
+    counter = 0
+    while debug_dir.exists():
+        counter += 1
+        debug_dir = Path(f"{base_path}_{counter}")
+    return debug_dir
+
+
 # Third-party imports
 import openai
 from dotenv import load_dotenv
@@ -52,9 +66,11 @@ class AzureConfig:
 class EPUBOCRCleaner:
     """Main class for cleaning OCR artifacts from EPUB files using Azure GPT-4.1"""
     
-    def __init__(self):
+    def __init__(self, debug_mode: bool = False, debug_dir: Optional[Path] = None):
         self.config = self._load_azure_config()
         self.client = self._initialize_azure_client()
+        self.debug_mode = debug_mode
+        self.debug_dir = debug_dir
         
     def _load_azure_config(self) -> AzureConfig:
         """Load Azure OpenAI configuration from environment variables"""
@@ -94,7 +110,15 @@ class EPUBOCRCleaner:
         print(f"Extracting EPUB content from: {epub_path}")
         
         # Create temporary directory for extraction
-        temp_dir = tempfile.mkdtemp()
+        # Create temporary directory for extraction
+        # If debug mode, create it within the debug_dir
+        if self.debug_mode and self.debug_dir:
+            extract_base_dir = self.debug_dir / "epub_extracted_content"
+            extract_base_dir.mkdir(parents=True, exist_ok=True)
+            temp_dir = tempfile.mkdtemp(dir=extract_base_dir)
+            print(f"🔍 DEBUG: EPUB content extracted to: {temp_dir}")
+        else:
+            temp_dir = tempfile.mkdtemp()
         
         try:
             # Extract EPUB (which is a ZIP file)
@@ -129,7 +153,9 @@ class EPUBOCRCleaner:
             return {'content_items': content_items, 'metadata': metadata}, temp_dir
             
         except Exception as e:
-            shutil.rmtree(temp_dir, ignore_errors=True)
+            # Only remove temp_dir if not in debug mode, otherwise leave for inspection
+            if not (self.debug_mode and self.debug_dir):
+                shutil.rmtree(temp_dir, ignore_errors=True)
             raise Exception(f"Error extracting EPUB: {str(e)}")
     
     def analyze_ocr_artifacts(self, text: str) -> Dict[str, int]:
@@ -213,18 +239,36 @@ Kérlek, tisztítsd meg a következő szöveget:
         for i, chunk in enumerate(tqdm(chunks, desc="Cleaning text")):
             for attempt in range(self.config.max_retries):
                 try:
+                    messages = [
+                        {"role": "system", "content": self.create_cleanup_prompt()},
+                        {"role": "user", "content": chunk}
+                    ]
+                    
                     response = self.client.chat.completions.create(
                         model=self.config.deployment_name,
-                        messages=[
-                            {"role": "system", "content": self.create_cleanup_prompt()},
-                            {"role": "user", "content": chunk}
-                        ],
+                        messages=messages,
                         temperature=self.config.temperature,
                         max_tokens=self.config.max_tokens_response
                     )
                     
                     cleaned_text = response.choices[0].message.content.strip()
                     cleaned_chunks.append(cleaned_text)
+
+                    if self.debug_mode and self.debug_dir:
+                        llm_debug_dir = self.debug_dir / "llm_requests_responses"
+                        llm_debug_dir.mkdir(parents=True, exist_ok=True)
+                        
+                        request_file = llm_debug_dir / f"llm_request_chunk_{i+1}_attempt_{attempt+1}.json"
+                        response_file = llm_debug_dir / f"llm_response_chunk_{i+1}_attempt_{attempt+1}.json"
+                        
+                        with open(request_file, 'w', encoding='utf-8') as f:
+                            json.dump({"messages": messages, "temperature": self.config.temperature, "max_tokens": self.config.max_tokens_response}, f, ensure_ascii=False, indent=2)
+                        
+                        with open(response_file, 'w', encoding='utf-8') as f:
+                            json.dump(response.model_dump_json(indent=2), f, ensure_ascii=False, indent=2)
+                        
+                        print(f"🔍 DEBUG: LLM request/response for chunk {i+1} saved to {llm_debug_dir}")
+
                     break
                     
                 except Exception as e:
@@ -439,8 +483,14 @@ Kérlek, tisztítsd meg a következő szöveget:
         # Create interim directory if saving to disk
         interim_dir = None
         if save_interim:
-            interim_dir = tempfile.mkdtemp(prefix="epub_cleanup_")
-            print(f"Interim results will be saved to: {interim_dir}")
+            if self.debug_mode and self.debug_dir:
+                interim_base_dir = self.debug_dir / "interim_json_results"
+                interim_base_dir.mkdir(parents=True, exist_ok=True)
+                interim_dir = tempfile.mkdtemp(dir=interim_base_dir)
+                print(f"🔍 DEBUG: Interim JSON results will be saved to: {interim_dir}")
+            else:
+                interim_dir = tempfile.mkdtemp(prefix="epub_cleanup_")
+                print(f"Interim results will be saved to: {interim_dir}")
         
         try:
             # Extract content
@@ -541,8 +591,13 @@ Kérlek, tisztítsd meg a következő szöveget:
             # Create new EPUB
             self.create_cleaned_epub(original_data, cleaned_content, output_path, debug=debug)
             
-            # Cleanup
-            shutil.rmtree(temp_dir, ignore_errors=True)
+            # Cleanup temporary extraction directory if not in debug mode
+            if not (self.debug_mode and self.debug_dir):
+                shutil.rmtree(temp_dir, ignore_errors=True)
+            
+            # Cleanup interim JSON directory if not in debug mode
+            if save_interim and interim_dir and not (self.debug_mode and self.debug_dir):
+                shutil.rmtree(interim_dir, ignore_errors=True)
             
             print(f"\n✅ EPUB cleanup completed!")
             print(f"📊 Total OCR artifacts found: {total_artifacts}")
@@ -606,6 +661,17 @@ def main():
     if args.save_interim or config.save_interim:
         args.save_interim = True
 
+    # --- Debug directory setup ---
+    debug_dir = None
+    if args.debug:
+        output_path_obj = Path(args.output_file)
+        debug_base_name = output_path_obj.stem
+        debug_base_dir = output_path_obj.parent / debug_base_name
+        debug_dir = _get_unique_debug_dir(debug_base_dir)
+        debug_dir.mkdir(parents=True, exist_ok=True)
+        print(f"🔍 DEBUG: Debug files will be saved to: {debug_dir}")
+    # --- End Debug directory setup ---
+
     input_ext = Path(args.input_file).suffix.lower()
     output_ext = Path(args.output_file).suffix.lower()
 
@@ -620,7 +686,8 @@ def main():
     # Initialize Azure storage handler for potential cleanup
     storage_handler = None
     try:
-        storage_handler = AzureStorageHandler(config)
+        # Pass debug_mode and debug_dir to AzureStorageHandler
+        storage_handler = AzureStorageHandler(config, debug_mode=args.debug, debug_dir=debug_dir)
     except ValueError as e:
         # Only fail if we need to upload files
         if input_ext == '.pdf' and not args.input_file.startswith(('http://', 'https://')):
@@ -642,7 +709,7 @@ def main():
                 pdf_url = storage_handler.upload_pdf(args.input_file)
             
             print(f"Running OCR only: {args.input_file} -> {args.output_file}")
-            pdf_processor = PDFOCRProcessor()
+            pdf_processor = PDFOCRProcessor(debug_mode=args.debug, debug_dir=debug_dir)
             ocr_result = pdf_processor.process_pdf(pdf_url)
             extracted_text = pdf_processor.extract_text_from_ocr_result(ocr_result)
 
@@ -664,7 +731,8 @@ def main():
                 return 1
             
             print(f"Running EPUB cleanup only: {args.input_file} -> {args.output_file}")
-            cleaner = EPUBOCRCleaner()
+            # Pass debug_mode and debug_dir to EPUBOCRCleaner
+            cleaner = EPUBOCRCleaner(debug_mode=args.debug, debug_dir=debug_dir)
             cleaner.clean_epub(args.input_file, args.output_file, debug=args.debug, save_interim=args.save_interim)
             
         else: # Full pipeline: PDF -> OCR -> EPUB -> Cleanup
@@ -685,7 +753,7 @@ def main():
             interim_epub_path = Path(args.output_file).with_stem(Path(args.output_file).stem + "_interim_ocr").with_suffix(".epub")
             
             print(f"Step 1/2: Performing OCR on PDF and creating interim EPUB: {interim_epub_path}")
-            pdf_processor = PDFOCRProcessor()
+            pdf_processor = PDFOCRProcessor(debug_mode=args.debug, debug_dir=debug_dir)
             ocr_result = pdf_processor.process_pdf(pdf_url)
             extracted_text = pdf_processor.extract_text_from_ocr_result(ocr_result)
 
@@ -703,12 +771,19 @@ def main():
 
             # Step 2: Clean up the interim EPUB
             print(f"Step 2/2: Cleaning up interim EPUB: {interim_epub_path} -> {args.output_file}")
-            cleaner = EPUBOCRCleaner()
+            # Pass debug_mode and debug_dir to EPUBOCRCleaner
+            cleaner = EPUBOCRCleaner(debug_mode=args.debug, debug_dir=debug_dir)
             cleaner.clean_epub(interim_epub_path, args.output_file, debug=args.debug, save_interim=args.save_interim)
             
-            # Clean up interim file
-            os.remove(interim_epub_path)
-            print(f"Cleaned up interim file: {interim_epub_path}")
+            # Clean up interim file if not in debug mode
+            if args.debug and debug_dir:
+                # Move interim EPUB to debug directory
+                debug_interim_path = debug_dir / interim_epub_path.name
+                shutil.move(interim_epub_path, debug_interim_path)
+                print(f"Moved interim file to debug directory: {debug_interim_path}")
+            else:
+                os.remove(interim_epub_path)
+                print(f"Cleaned up interim file: {interim_epub_path}")
             
             print(f"Full pipeline completed: {args.input_file} -> {args.output_file}")
 
@@ -718,11 +793,17 @@ def main():
         print(f"Error: {str(e)}")
         return 1
     finally:
-        # Always clean up Azure storage
-        if storage_handler and config.cleanup_on_failure:
+        # Always clean up Azure storage unless in debug mode
+        if storage_handler and config.cleanup_on_failure and not args.debug:
             successful, failed = storage_handler.cleanup_all()
             if failed > 0:
                 print(f"Warning: Failed to clean up {failed} temporary file(s) from Azure")
+        elif storage_handler and args.debug and debug_dir:
+            # In debug mode, do not delete blobs from Azure
+            print(f"🔍 DEBUG: --debug flag is on. Temporary blobs will not be deleted from Azure Storage.")
+            # The download step is removed as per user feedback.
+            # If you need to download blobs that are not local files, the logic can be added here.
+            # For now, we just skip cleanup.
 
 
 if __name__ == "__main__":

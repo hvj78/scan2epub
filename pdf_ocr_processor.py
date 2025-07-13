@@ -1,7 +1,9 @@
 import os
 import time
 import requests
-from typing import List, Dict, Any
+import json
+from pathlib import Path
+from typing import List, Dict, Any, Optional
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -12,11 +14,14 @@ class PDFOCRProcessor:
     Processes PDF files using Azure AI Content Understanding for OCR.
     Extracts structured text (paragraphs, lines, words) from PDF documents.
     """
-    def __init__(self):
+    def __init__(self, debug_mode: bool = False, debug_dir: Optional[Path] = None):
         self.endpoint = os.getenv("AZURE_CU_ENDPOINT")
         self.api_key = os.getenv("AZURE_CU_API_KEY")
         self.api_version = "2025-05-01-preview" # Current API version for Content Understanding
         self.analyzer_id = "prebuilt-documentAnalyzer" # Using the prebuilt document analyzer
+        self.debug_mode = debug_mode
+        self.debug_dir = debug_dir
+
 
         if not self.endpoint or not self.api_key:
             raise ValueError("AZURE_CU_ENDPOINT and AZURE_CU_API_KEY must be set in environment variables.")
@@ -100,6 +105,13 @@ class PDFOCRProcessor:
         
         result = self._get_analyze_result(operation_id)
         print(f"OCR processing completed for {pdf_url}")
+
+        if self.debug_mode and self.debug_dir:
+            debug_file_path = self.debug_dir / "azure_cu_result.json"
+            with open(debug_file_path, 'w', encoding='utf-8') as f:
+                json.dump(result, f, ensure_ascii=False, indent=2)
+            print(f"🔍 DEBUG: Azure Content Understanding result saved to: {debug_file_path}")
+
         return result
                         
     def extract_text_from_ocr_result(self, analyze_result: Dict[str, Any]) -> str:
