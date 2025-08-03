@@ -8,23 +8,17 @@ recommendations for troubleshooting.
 
 import os
 import sys
-import time
-import tempfile
 from datetime import datetime, timedelta
-from pathlib import Path
-from typing import Dict, List, Tuple, Optional
-import json
+from typing import Optional
 
-# Third-party imports
 import requests
 import openai
 from azure.storage.blob import BlobServiceClient, BlobSasPermissions, generate_blob_sas
 from azure.core.exceptions import AzureError
-from dotenv import load_dotenv
-import binascii # Added for binascii.Error handling
+from dotenv import load_dotenv  # CLI should call load_dotenv(), but keep here for stand-alone use
+import binascii  # For binascii.Error handling
 
-# Local imports
-from config_manager import ConfigManager
+from scan2epub.config_manager import ConfigManager  # Using INI-based config under package
 
 
 class Colors:
@@ -89,7 +83,7 @@ class AzureConfigTester:
         
         success = True
         
-        # Test .env file loading
+        # Test .env file loading (support stand-alone run)
         try:
             load_dotenv()
             self.print_success(".env file found and loaded")
@@ -287,7 +281,6 @@ class AzureConfigTester:
                 "Content-Type": "application/json"
             }
             
-            # Test with a simple health check or list analyzers endpoint
             test_url = f"{endpoint.rstrip('/')}/contentunderstanding/analyzers?api-version=2025-05-01-preview"
             
             response = requests.get(test_url, headers=headers, timeout=30)
@@ -435,6 +428,8 @@ class AzureConfigTester:
 
 def main():
     """Main function for running Azure configuration tests"""
+    # Allow stand-alone execution
+    load_dotenv()
     tester = AzureConfigTester()
     return tester.run_all_tests()
 

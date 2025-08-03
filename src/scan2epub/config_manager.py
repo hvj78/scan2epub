@@ -5,10 +5,9 @@ Handles user configuration using INI format for ease of use.
 Provides defaults and validation for all settings.
 """
 
-import os
 import configparser
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Any, Optional
 
 
 class ConfigManager:
@@ -36,7 +35,7 @@ class ConfigManager:
         
         Args:
             config_path: Path to configuration file. If None, looks for scan2epub.ini
-                        in current directory, then uses defaults.
+                         in current directory, then uses defaults.
         """
         self.config = configparser.ConfigParser()
         
@@ -114,14 +113,6 @@ log_cleanup = true
     def get(self, section: str, option: str, fallback: Any = None) -> Any:
         """
         Get a configuration value
-        
-        Args:
-            section: Configuration section name
-            option: Option name within the section
-            fallback: Default value if option not found
-            
-        Returns:
-            Configuration value or fallback
         """
         return self.config.get(section, option, fallback=fallback)
     

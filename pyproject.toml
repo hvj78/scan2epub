@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scan2epub"
+version = "0.1.0"
+description = "Convert scanned/photographed PDFs to clean EPUB using Azure OCR and GPT cleanup."
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+authors = [{ name = "János Horváth-Varga", email = "horvath.varga.janos@gmail.com" }]
+dependencies = [
+    "openai>=1.0.0",
+    "python-dotenv>=1.0.0",
+    "ebooklib>=0.18",
+    "beautifulsoup4>=4.12.0",
+    "lxml>=4.9.0",
+    "requests>=2.31.0",
+    "tqdm>=4.66.0",
+    "psutil>=5.9.0",
+    "azure-storage-blob>=12.19.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/hvj78/scan2epub"
+
+[project.scripts]
+scan2epub = "scan2epub.cli:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

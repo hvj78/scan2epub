@@ -1,14 +1,3 @@
-#!/usr/bin/env python3
-"""
-EPUB OCR Cleanup Script with Azure GPT-4.1 Integration
-
-This script cleans up OCR artifacts from EPUB files using Azure OpenAI GPT-4.1.
-It removes page separations, line breaks, word divisions, and combines Hungarian
-divided words while preserving the original content and meaning.
-
-Author: Generated for Hungarian EPUB cleanup
-"""
-
 import os
 import re
 import json
@@ -20,35 +9,12 @@ from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 from dataclasses import dataclass
 
-# Helper for debug directory creation
-def _get_unique_debug_dir(base_path: Path) -> Path:
-    """
-    Generates a unique directory path for debug files.
-    If the base path exists, appends a counter (e.g., _1, _2) until a unique path is found.
-    """
-    debug_dir = base_path
-    counter = 0
-    while debug_dir.exists():
-        counter += 1
-        debug_dir = Path(f"{base_path}_{counter}")
-    return debug_dir
-
-
-# Third-party imports
 import openai
-from dotenv import load_dotenv
 from bs4 import BeautifulSoup
 from ebooklib import epub
-from tqdm import tqdm
 
-# Local imports
-from pdf_ocr_processor import PDFOCRProcessor
-from epub_builder import EPUBBuilder
-from config_manager import ConfigManager
-from azure_storage_handler import AzureStorageHandler
+from scan2epub.utils.errors import LLMError, EPUBError
 
-# Load environment variables
-load_dotenv()
 
 @dataclass
 class AzureConfig:
@@ -63,8 +29,9 @@ class AzureConfig:
     max_retries: int
     retry_delay: int
 
+
 class EPUBOCRCleaner:
-    """Main class for cleaning OCR artifacts from EPUB files using Azure GPT-4.1"""
+    """Cleans OCR artifacts from EPUB files using Azure GPT-4.1"""
     
     def __init__(self, debug_mode: bool = False, debug_dir: Optional[Path] = None):
         self.config = self._load_azure_config()
@@ -83,7 +50,7 @@ class EPUBOCRCleaner:
         
         missing_vars = [var for var in required_vars if not os.getenv(var)]
         if missing_vars:
-            raise ValueError(f"Missing required environment variables: {missing_vars}")
+            raise LLMError(f"Missing required environment variables: {missing_vars}")
             
         return AzureConfig(
             api_key=os.getenv('AZURE_OPENAI_API_KEY'),
@@ -110,8 +77,6 @@ class EPUBOCRCleaner:
         print(f"Extracting EPUB content from: {epub_path}")
         
         # Create temporary directory for extraction
-        # Create temporary directory for extraction
-        # If debug mode, create it within the debug_dir
         if self.debug_mode and self.debug_dir:
             extract_base_dir = self.debug_dir / "epub_extracted_content"
             extract_base_dir.mkdir(parents=True, exist_ok=True)
@@ -132,7 +97,7 @@ class EPUBOCRCleaner:
             content_items = []
             for item in book.get_items():
                 if item.get_type() == 9:  # EBOOKLIB_ITEM_DOCUMENT
-                    soup = BeautifulSoup(item.get_content(), 'html.parser')
+                    soup = BeautifulSoup(item.get_content(), 'lxml')
                     text_content = soup.get_text()
                     
                     content_items.append({
@@ -156,7 +121,7 @@ class EPUBOCRCleaner:
             # Only remove temp_dir if not in debug mode, otherwise leave for inspection
             if not (self.debug_mode and self.debug_dir):
                 shutil.rmtree(temp_dir, ignore_errors=True)
-            raise Exception(f"Error extracting EPUB: {str(e)}")
+            raise EPUBError(f"Error extracting EPUB: {str(e)}")
     
     def analyze_ocr_artifacts(self, text: str) -> Dict[str, int]:
         """Analyze text for common OCR artifacts"""
@@ -175,7 +140,8 @@ class EPUBOCRCleaner:
 
 FELADATOD:
 1. Távolítsd el az OCR által okozott felesleges sortöréseket és oldalelválasztásokat
-2. Egyesítsd a sorvégeken elválasztott magyar szavakat (pl. "szó-\ntag" → "szótag")
+2. Egyesítsd a sorvégeken elválasztott magyar szavakat (pl. "szó-
+tag" → "szótag")
 3. Távolítsd el a felesleges szóközöket és formázási hibákat
 4. Őrizd meg a bekezdések természetes szerkezetét
 5. NE változtasd meg a szöveg jelentését vagy tartalmát
@@ -236,7 +202,7 @@ Kérlek, tisztítsd meg a következő szöveget:
         
         print(f"Processing {len(chunks)} text chunks...")
         
-        for i, chunk in enumerate(tqdm(chunks, desc="Cleaning text")):
+        for i, chunk in enumerate(chunks, start=1):
             for attempt in range(self.config.max_retries):
                 try:
                     messages = [
@@ -258,23 +224,33 @@ Kérlek, tisztítsd meg a következő szöveget:
                         llm_debug_dir = self.debug_dir / "llm_requests_responses"
                         llm_debug_dir.mkdir(parents=True, exist_ok=True)
                         
-                        request_file = llm_debug_dir / f"llm_request_chunk_{i+1}_attempt_{attempt+1}.json"
-                        response_file = llm_debug_dir / f"llm_response_chunk_{i+1}_attempt_{attempt+1}.json"
+                        request_file = llm_debug_dir / f"llm_chunk_{i}_request_attempt_{attempt+1}.json"
+                        response_file = llm_debug_dir / f"llm_chunk_{i}_response_attempt_{attempt+1}.json"
                         
                         with open(request_file, 'w', encoding='utf-8') as f:
-                            json.dump({"messages": messages, "temperature": self.config.temperature, "max_tokens": self.config.max_tokens_response}, f, ensure_ascii=False, indent=2)
+                            json.dump(
+                                {
+                                    "messages": messages,
+                                    "temperature": self.config.temperature,
+                                    "max_tokens": self.config.max_tokens_response,
+                                },
+                                f,
+                                ensure_ascii=False,
+                                indent=2,
+                            )
                         
+                        # response.model_dump_json() returns a JSON string; write it directly
                         with open(response_file, 'w', encoding='utf-8') as f:
-                            json.dump(response.model_dump_json(indent=2), f, ensure_ascii=False, indent=2)
+                            f.write(response.model_dump_json(indent=2))
                         
-                        print(f"🔍 DEBUG: LLM request/response for chunk {i+1} saved to {llm_debug_dir}")
+                        print(f"🔍 DEBUG: LLM request/response for chunk {i} saved to {llm_debug_dir}")
 
                     break
                     
                 except Exception as e:
-                    print(f"Error processing chunk {i+1}, attempt {attempt+1}: {str(e)}")
+                    print(f"Error processing chunk {i}, attempt {attempt+1}: {str(e)}")
                     if attempt == self.config.max_retries - 1:
-                        print(f"Failed to process chunk {i+1}, using original text")
+                        print(f"Failed to process chunk {i}, using original text")
                         cleaned_chunks.append(chunk)
                     else:
                         time.sleep(self.config.retry_delay)
@@ -291,7 +267,6 @@ Kérlek, tisztítsd meg a következő szöveget:
 <body><p>This chapter appears to be empty.</p></body>
 </html>"""
         
-        # Create a simple, clean HTML structure
         # Split cleaned text into paragraphs
         paragraphs = [p.strip() for p in cleaned_text.split('\n\n') if p.strip()]
         
@@ -299,17 +274,14 @@ Kérlek, tisztítsd meg a következő szöveget:
         if not paragraphs:
             paragraphs = [cleaned_text.strip()]
         
-        # Create a simple HTML structure
         html_content = """<?xml version='1.0' encoding='utf-8'?>
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head><title>Chapter</title></head>
 <body>
 """
-        
-        # Add paragraphs
         for paragraph in paragraphs:
             if paragraph.strip():
-                # Check if this looks like a heading
+                # Simple heuristic: short lines without trailing period might be headings
                 if len(paragraph) < 100 and not paragraph.endswith('.'):
                     html_content += f"<h2>{paragraph}</h2>\n"
                 else:
@@ -326,7 +298,7 @@ Kérlek, tisztítsd meg a következő szöveget:
         
         # Check if we have any content to work with
         if not cleaned_content:
-            raise ValueError("No content found to create EPUB. All chapters appear to be empty.")
+            raise EPUBError("No content found to create EPUB. All chapters appear to be empty.")
         
         if debug:
             print(f"🔍 DEBUG: Starting EPUB creation with {len(cleaned_content)} chapters")
@@ -350,12 +322,10 @@ Kérlek, tisztítsd meg a következő szöveget:
             if debug:
                 print(f"🔍 DEBUG: Processing chapter {i+1}: {item_data['file_name']}")
             
-            # Ensure we have valid HTML content
             html_content = item_data.get('cleaned_html', '')
             if not html_content.strip():
                 if debug:
                     print(f"🔍 DEBUG: Empty HTML content for {item_data['file_name']}, creating placeholder")
-                # Create minimal content if empty
                 html_content = """<?xml version='1.0' encoding='utf-8'?>
 <html xmlns="http://www.w3.org/1999/xhtml">
 <head><title>Empty Chapter</title></head>
@@ -373,7 +343,6 @@ Kérlek, tisztítsd meg a következő szöveget:
                 lang=metadata['language']
             )
             
-            # Set content as bytes to ensure proper encoding
             try:
                 if isinstance(html_content, str):
                     chapter.content = html_content.encode('utf-8')
@@ -383,14 +352,6 @@ Kérlek, tisztítsd meg a következő szöveget:
                 if debug:
                     print(f"🔍 DEBUG: Set content for {item_data['file_name']} - Content type: {type(chapter.content)}, Length: {len(chapter.content)}")
                 
-                # Verify content was set
-                if hasattr(chapter, 'content') and chapter.content:
-                    if debug:
-                        print(f"🔍 DEBUG: Content verification passed for {item_data['file_name']}")
-                else:
-                    if debug:
-                        print(f"🔍 DEBUG: WARNING - Content verification failed for {item_data['file_name']}")
-                
             except Exception as e:
                 print(f"❌ Error setting content for {item_data['file_name']}: {str(e)}")
                 if debug:
@@ -399,15 +360,11 @@ Kérlek, tisztítsd meg a következő szöveget:
             
             book.add_item(chapter)
             chapters.append(chapter)
-            
-            if debug:
-                print(f"🔍 DEBUG: Added chapter {i+1} to book")
         
-        # Ensure we have at least one chapter
+        # Ensure at least one chapter
         if not chapters:
             if debug:
                 print(f"🔍 DEBUG: No chapters found, creating placeholder")
-            # Create a placeholder chapter
             placeholder_chapter = epub.EpubHtml(
                 title='Placeholder Chapter',
                 file_name='placeholder.xhtml',
@@ -440,30 +397,9 @@ Kérlek, tisztítsd meg a következő szöveget:
         try:
             epub.write_epub(output_path, book, {})
             print(f"Cleaned EPUB saved to: {output_path}")
-            
-            if debug:
-                # Verify the created EPUB
-                import os
-                file_size = os.path.getsize(output_path)
-                print(f"🔍 DEBUG: Created EPUB file size: {file_size} bytes")
-                
-                # Try to read it back to verify
-                try:
-                    test_book = epub.read_epub(output_path)
-                    test_items = list(test_book.get_items())
-                    print(f"🔍 DEBUG: Verification - EPUB contains {len(test_items)} items")
-                    
-                    for item in test_items:
-                        if item.get_type() == 9:  # EBOOKLIB_ITEM_DOCUMENT
-                            content_length = len(item.get_content()) if item.get_content() else 0
-                            print(f"🔍 DEBUG: Verification - {item.get_name()}: {content_length} bytes")
-                            
-                except Exception as verify_error:
-                    print(f"🔍 DEBUG: Verification failed: {str(verify_error)}")
-                    
         except Exception as e:
             print(f"❌ Error writing EPUB: {str(e)}")
-            raise
+            raise EPUBError(str(e))
     
     def clean_epub(self, input_path: str, output_path: str = None, debug: bool = False, save_interim: bool = False):
         """Main method to clean an EPUB file"""
@@ -500,12 +436,13 @@ Kérlek, tisztítsd meg a következő szöveget:
                 print(f"\n🔍 DEBUG: Found {len(original_data['content_items'])} content items")
                 for i, item in enumerate(original_data['content_items']):
                     print(f"  Item {i+1}: {item['file_name']} - Content length: {len(item['content'])} chars")
-                
-                # Memory usage monitoring
-                import psutil
-                process = psutil.Process()
-                memory_mb = process.memory_info().rss / 1024 / 1024
-                print(f"🔍 DEBUG: Current memory usage: {memory_mb:.1f} MB")
+                try:
+                    import psutil  # Optional monitoring
+                    process = psutil.Process()
+                    memory_mb = process.memory_info().rss / 1024 / 1024
+                    print(f"🔍 DEBUG: Current memory usage: {memory_mb:.1f} MB")
+                except Exception:
+                    pass
             
             # Process each content item
             cleaned_content = []
@@ -561,19 +498,12 @@ Kérlek, tisztítsd meg a következő szöveget:
                         if debug:
                             print(f"🔍 DEBUG: Saved interim results to: {interim_file}")
                         
-                        # Store only essential data in memory
                         cleaned_content.append({
                             'file_name': item['file_name'],
                             'title': item['title'],
                             'cleaned_html': cleaned_html
                         })
-                        
-                        # Monitor memory usage after each chapter
-                        if debug:
-                            memory_mb = process.memory_info().rss / 1024 / 1024
-                            print(f"🔍 DEBUG: Memory usage after processing: {memory_mb:.1f} MB")
                     else:
-                        # Store everything in memory (original behavior)
                         cleaned_content.append({
                             'file_name': item['file_name'],
                             'title': item['title'],
@@ -600,211 +530,10 @@ Kérlek, tisztítsd meg a következő szöveget:
                 shutil.rmtree(interim_dir, ignore_errors=True)
             
             print(f"\n✅ EPUB cleanup completed!")
-            print(f"📊 Total OCR artifacts found: {total_artifacts}")
             print(f"📁 Original file: {input_path}")
             print(f"📁 Cleaned file: {output_path}")
             print(f"📁 Backup file: {backup_path}")
             
         except Exception as e:
             print(f"❌ Error during cleanup: {str(e)}")
-            raise
-
-
-def main():
-    """Main function for command-line usage"""
-    import argparse
-    
-    parser = argparse.ArgumentParser(
-        description='Convert scanned PDFs to clean EPUBs or clean existing EPUBs using Azure AI.'
-    )
-    parser.add_argument('input_file', nargs='?', help='Path to input file (PDF file or URL for OCR, EPUB for cleanup)')
-    parser.add_argument('output_file', nargs='?', help='Path to output EPUB file')
-    parser.add_argument('--ocr-only', action='store_true', 
-                        help='Run only the OCR stage (PDF to EPUB conversion)')
-    parser.add_argument('--cleanup-only', action='store_true', 
-                        help='Run only the cleanup stage (EPUB to cleaned EPUB)')
-    parser.add_argument('--preserve-images', action='store_true', 
-                        help='(Not yet implemented) Include images in the output EPUB during OCR stage')
-    parser.add_argument('--language', type=str, default='hu', 
-                        help='Set OCR language (default: Hungarian)')
-    parser.add_argument('--debug', action='store_true', 
-                        help='Enable debug output to troubleshoot issues')
-    parser.add_argument('--save-interim', action='store_true', 
-                        help='Save interim results to disk to reduce memory usage (for cleanup stage)')
-    parser.add_argument('--config', type=str, default=None,
-                        help='Path to configuration file (default: scan2epub.ini)')
-    parser.add_argument('--azure-test', action='store_true',
-                        help='Run Azure configuration tests and exit')
-    
-    args = parser.parse_args()
-
-    # Handle Azure configuration testing
-    if args.azure_test:
-        from azure_config_tester import AzureConfigTester
-        print("Running Azure configuration tests...")
-        tester = AzureConfigTester()
-        success = tester.run_all_tests()
-        return 0 if success else 1
-
-    # Validate required arguments when not running tests
-    if not args.input_file or not args.output_file:
-        parser.error("input_file and output_file are required unless using --azure-test")
-
-    # Load configuration
-    config = ConfigManager(args.config)
-    
-    # Apply debug setting from command line or config
-    if args.debug or config.debug:
-        args.debug = True
-    
-    # Apply save_interim setting from command line or config
-    if args.save_interim or config.save_interim:
-        args.save_interim = True
-
-    # --- Debug directory setup ---
-    debug_dir = None
-    if args.debug:
-        output_path_obj = Path(args.output_file)
-        debug_base_name = output_path_obj.stem
-        debug_base_dir = output_path_obj.parent / debug_base_name
-        debug_dir = _get_unique_debug_dir(debug_base_dir)
-        debug_dir.mkdir(parents=True, exist_ok=True)
-        print(f"🔍 DEBUG: Debug files will be saved to: {debug_dir}")
-    # --- End Debug directory setup ---
-
-    input_ext = Path(args.input_file).suffix.lower()
-    output_ext = Path(args.output_file).suffix.lower()
-
-    if output_ext != '.epub':
-        print(f"Error: Output file must have .epub extension, but got {output_ext}")
-        return 1
-
-    if args.ocr_only and args.cleanup_only:
-        print("Error: Cannot use --ocr-only and --cleanup-only simultaneously.")
-        return 1
-
-    # Initialize Azure storage handler for potential cleanup
-    storage_handler = None
-    try:
-        # Pass debug_mode and debug_dir to AzureStorageHandler
-        storage_handler = AzureStorageHandler(config, debug_mode=args.debug, debug_dir=debug_dir)
-    except ValueError as e:
-        # Only fail if we need to upload files
-        if input_ext == '.pdf' and not args.input_file.startswith(('http://', 'https://')):
-            print(f"Error: {e}")
-            print("Azure Storage is required for local PDF files.")
-            return 1
-
-    try:
-        if args.ocr_only:
-            if input_ext != '.pdf':
-                print("Error: --ocr-only mode requires a PDF input file.")
-                return 1
-            
-            # Determine if input is URL or local file
-            pdf_url = args.input_file
-            if not storage_handler.is_url(args.input_file):
-                # Local file - upload to Azure
-                print(f"Detected local PDF file: {args.input_file}")
-                pdf_url = storage_handler.upload_pdf(args.input_file)
-            
-            print(f"Running OCR only: {args.input_file} -> {args.output_file}")
-            pdf_processor = PDFOCRProcessor(debug_mode=args.debug, debug_dir=debug_dir)
-            ocr_result = pdf_processor.process_pdf(pdf_url)
-            extracted_text = pdf_processor.extract_text_from_ocr_result(ocr_result)
-
-            # Basic metadata extraction
-            title = Path(args.input_file).stem
-            author = "Unknown"
-            language = args.language
-
-            epub_builder = EPUBBuilder()
-            epub_builder.set_metadata(title=title, author=author, language=language)
-            epub_builder.add_chapter(title="Document Content", content=extracted_text)
-            epub_builder.build_epub(args.output_file)
-            
-            print(f"OCR to EPUB conversion completed: {args.input_file} -> {args.output_file}")
-
-        elif args.cleanup_only:
-            if input_ext != '.epub':
-                print("Error: --cleanup-only mode requires an EPUB input file.")
-                return 1
-            
-            print(f"Running EPUB cleanup only: {args.input_file} -> {args.output_file}")
-            # Pass debug_mode and debug_dir to EPUBOCRCleaner
-            cleaner = EPUBOCRCleaner(debug_mode=args.debug, debug_dir=debug_dir)
-            cleaner.clean_epub(args.input_file, args.output_file, debug=args.debug, save_interim=args.save_interim)
-            
-        else: # Full pipeline: PDF -> OCR -> EPUB -> Cleanup
-            if input_ext != '.pdf':
-                print("Error: Full pipeline requires a PDF input file.")
-                return 1
-            
-            # Determine if input is URL or local file
-            pdf_url = args.input_file
-            if storage_handler and not storage_handler.is_url(args.input_file):
-                # Local file - upload to Azure
-                print(f"Detected local PDF file: {args.input_file}")
-                pdf_url = storage_handler.upload_pdf(args.input_file)
-            
-            print(f"Running full pipeline: {args.input_file} -> {args.output_file}")
-            
-            # Step 1: OCR PDF and convert to interim EPUB
-            interim_epub_path = Path(args.output_file).with_stem(Path(args.output_file).stem + "_interim_ocr").with_suffix(".epub")
-            
-            print(f"Step 1/2: Performing OCR on PDF and creating interim EPUB: {interim_epub_path}")
-            pdf_processor = PDFOCRProcessor(debug_mode=args.debug, debug_dir=debug_dir)
-            ocr_result = pdf_processor.process_pdf(pdf_url)
-            extracted_text = pdf_processor.extract_text_from_ocr_result(ocr_result)
-
-            # Basic metadata extraction
-            title = Path(args.input_file).stem
-            author = "Unknown"
-            language = args.language
-
-            epub_builder = EPUBBuilder()
-            epub_builder.set_metadata(title=title, author=author, language=language)
-            epub_builder.add_chapter(title="Document Content", content=extracted_text)
-            epub_builder.build_epub(interim_epub_path)
-            
-            print(f"Interim EPUB created: {interim_epub_path}")
-
-            # Step 2: Clean up the interim EPUB
-            print(f"Step 2/2: Cleaning up interim EPUB: {interim_epub_path} -> {args.output_file}")
-            # Pass debug_mode and debug_dir to EPUBOCRCleaner
-            cleaner = EPUBOCRCleaner(debug_mode=args.debug, debug_dir=debug_dir)
-            cleaner.clean_epub(interim_epub_path, args.output_file, debug=args.debug, save_interim=args.save_interim)
-            
-            # Clean up interim file if not in debug mode
-            if args.debug and debug_dir:
-                # Move interim EPUB to debug directory
-                debug_interim_path = debug_dir / interim_epub_path.name
-                shutil.move(interim_epub_path, debug_interim_path)
-                print(f"Moved interim file to debug directory: {debug_interim_path}")
-            else:
-                os.remove(interim_epub_path)
-                print(f"Cleaned up interim file: {interim_epub_path}")
-            
-            print(f"Full pipeline completed: {args.input_file} -> {args.output_file}")
-
-        return 0
-        
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        return 1
-    finally:
-        # Always clean up Azure storage unless in debug mode
-        if storage_handler and config.cleanup_on_failure and not args.debug:
-            successful, failed = storage_handler.cleanup_all()
-            if failed > 0:
-                print(f"Warning: Failed to clean up {failed} temporary file(s) from Azure")
-        elif storage_handler and args.debug and debug_dir:
-            # In debug mode, do not delete blobs from Azure
-            print(f"🔍 DEBUG: --debug flag is on. Temporary blobs will not be deleted from Azure Storage.")
-            # The download step is removed as per user feedback.
-            # If you need to download blobs that are not local files, the logic can be added here.
-            # For now, we just skip cleanup.
-
-
-if __name__ == "__main__":
-    exit(main())
+            raise EPUBError(str(e))

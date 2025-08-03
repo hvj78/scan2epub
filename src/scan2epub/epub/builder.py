@@ -9,6 +9,7 @@ class EPUBBuilder:
     def __init__(self):
         self.book = epub.EpubBook()
         self.chapters = []
+        self.language = "en"
 
     def set_metadata(self, title: str, author: str, language: str = 'en', identifier: str = 'unknown'):
         """Sets the EPUB book metadata."""
@@ -16,14 +17,14 @@ class EPUBBuilder:
         self.book.set_title(title)
         self.book.set_language(language)
         self.book.add_author(author)
-        self.language = language # Store language as an instance variable
+        self.language = language  # Store language as an instance variable
 
     def add_chapter(self, title: str, content: str, file_name: str = None):
         """Adds a chapter to the EPUB book."""
         if not file_name:
             # Create a simple file name from the title
             file_name = re.sub(r'[^\w]', '', title).lower() + '.xhtml'
-            if not file_name: # Fallback if title is empty or only special chars
+            if not file_name:  # Fallback if title is empty or only special chars
                 file_name = f'chapter_{len(self.chapters) + 1}.xhtml'
 
         chapter = epub.EpubHtml(title=title, file_name=file_name, lang=self.language)
@@ -63,39 +64,3 @@ class EPUBBuilder:
 
         epub.write_epub(output_path, self.book, {})
         print(f"EPUB file saved to: {output_path}")
-
-if __name__ == "__main__":
-    # Example Usage
-    builder = EPUBBuilder()
-    builder.set_metadata(title="Sample Book", author="John Doe", language="en")
-
-    # Add some chapters
-    builder.add_chapter(
-        title="Introduction",
-        content="""This is the introduction to our sample book.
-It explains the purpose and scope of the content.
-
-This is a new paragraph in the introduction.
-It demonstrates how paragraphs are handled."""
-    )
-
-    builder.add_chapter(
-        title="Chapter 1: The Beginning",
-        content="""Chapter 1 content starts here.
-It's an exciting beginning to our story.
-
-Another paragraph in Chapter 1.
-More details and plot points unfold."""
-    )
-    
-    builder.add_chapter(
-        title="Chapter 2: The Middle",
-        content="""Chapter 2 content.
-The story continues to develop.
-
-This is the final paragraph of Chapter 2."""
-    )
-
-    output_file = "sample_book.epub"
-    builder.build_epub(output_file)
-    print(f"Successfully created {output_file}")
