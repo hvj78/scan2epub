@@ -5,7 +5,7 @@ from typing import Optional
 
 from dotenv import load_dotenv
 
-from scan2epub.config_manager import ConfigManager
+from scan2epub.config import AppConfig
 from scan2epub.pipeline import run_ocr_to_epub, run_cleanup, run_full_pipeline
 from scan2epub.azure.diagnostics import AzureConfigTester
 from scan2epub.utils.io import get_unique_debug_dir
@@ -63,8 +63,8 @@ def main() -> int:
 
     args = parser.parse_args()
 
-    # Load configuration (INI)
-    cfg = ConfigManager(args.config if hasattr(args, "config") else None)
+    # Load typed application config (CLI is the only place that reads env via load_dotenv above)
+    app_cfg = AppConfig.from_env_and_ini(args.config if hasattr(args, "config") else None)
 
     # Dispatch
     try:
@@ -88,14 +88,14 @@ def main() -> int:
             return 1
 
         # Compute debug dir if needed
-        debug_enabled = getattr(args, "debug", False) or cfg.debug
+        debug_enabled = getattr(args, "debug", False) or app_cfg.processing.debug
         debug_dir = _compute_debug_dir(output_file, debug_enabled) if output_file else None
 
         if args.command == "ocr":
             input_pdf = args.input_pdf
             language = args.language
             run_ocr_to_epub(
-                cfg=cfg,
+                cfg=app_cfg,
                 input_path=input_pdf,
                 output_epub=args.output_epub,
                 language=language,
@@ -108,11 +108,11 @@ def main() -> int:
         elif args.command == "clean":
             input_epub = args.input_epub
             run_cleanup(
-                cfg=cfg,
+                cfg=app_cfg,
                 input_epub=input_epub,
                 output_epub=args.output_epub,
                 debug=debug_enabled,
-                save_interim=args.save_interim or cfg.save_interim,
+                save_interim=args.save_interim or app_cfg.processing.save_interim,
                 debug_dir=debug_dir,
             )
             print(f"EPUB cleanup completed: {args.input_epub} -> {args.output_epub}")
@@ -122,12 +122,12 @@ def main() -> int:
             input_pdf = args.input_pdf
             language = args.language
             run_full_pipeline(
-                cfg=cfg,
+                cfg=app_cfg,
                 input_pdf=input_pdf,
                 output_epub=args.output_epub,
                 language=language,
                 debug=debug_enabled,
-                save_interim=args.save_interim or cfg.save_interim,
+                save_interim=args.save_interim or app_cfg.processing.save_interim,
                 debug_dir=debug_dir,
             )
             print(f"Full pipeline completed: {args.input_pdf} -> {args.output_epub}")

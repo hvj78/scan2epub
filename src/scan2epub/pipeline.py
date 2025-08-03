@@ -5,11 +5,11 @@ from scan2epub.ocr.azure_cu import PDFOCRProcessor
 from scan2epub.epub.builder import EPUBBuilder
 from scan2epub.azure.storage import AzureStorageHandler
 from scan2epub.utils.errors import OCRError, EPUBError
-from scan2epub.config_manager import ConfigManager  # existing INI config
+from scan2epub.config import AppConfig  # typed config
 
 
 def run_ocr_to_epub(
-    cfg: ConfigManager,
+    cfg: AppConfig,
     input_path: str,
     output_epub: str,
     language: str = "hu",
@@ -27,8 +27,12 @@ def run_ocr_to_epub(
         # Determine if input is URL or local file
         pdf_url = input_path
         if not input_path.startswith(("http://", "https://")):
-            # Local file - upload using Azure Storage
-            storage_handler = AzureStorageHandler(cfg, debug_mode=debug, debug_dir=debug_dir)
+            # Local file - upload using Azure Storage via typed config
+            storage_handler = AzureStorageHandler(
+                storage_cfg=cfg.azure_storage,
+                debug_mode=debug,
+                debug_dir=debug_dir,
+            )
             pdf_url = storage_handler.upload_pdf(input_path)
 
         # OCR
@@ -47,12 +51,12 @@ def run_ocr_to_epub(
         return output_epub, interim_file
     finally:
         # Cleanup uploaded blobs unless debug
-        if storage_handler and cfg.cleanup_on_failure and not debug:
+        if storage_handler and cfg.processing.cleanup_on_failure and not debug:
             storage_handler.cleanup_all()
 
 
 def run_cleanup(
-    cfg: ConfigManager,
+    cfg: AppConfig,
     input_epub: str,
     output_epub: str,
     debug: bool = False,
@@ -72,7 +76,7 @@ def run_cleanup(
 
 
 def run_full_pipeline(
-    cfg: ConfigManager,
+    cfg: AppConfig,
     input_pdf: str,
     output_epub: str,
     language: str = "hu",

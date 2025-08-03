@@ -16,35 +16,44 @@ from azure.core.exceptions import AzureError
 from tqdm import tqdm
 
 from scan2epub.utils.errors import StorageError
+from scan2epub.config import AzureStorageConfig
 
 
 class AzureStorageHandler:
     """Handles Azure Blob Storage operations for temporary PDF storage"""
-    
-    def __init__(self, config_manager, debug_mode: bool = False, debug_dir: Optional[Path] = None):
+
+    def __init__(
+        self,
+        storage_cfg: AzureStorageConfig,
+        blob_service_client: Optional[BlobServiceClient] = None,
+        debug_mode: bool = False,
+        debug_dir: Optional[Path] = None,
+    ):
         """
         Initialize Azure Storage Handler
-        
+
         Args:
-            config_manager: ConfigManager-like instance for settings
+            storage_cfg: Typed AzureStorageConfig
+            blob_service_client: Optional pre-constructed BlobServiceClient for testing/DI
             debug_mode: True if debug mode is enabled
             debug_dir: Path to the debug directory for saving interim files
         """
-        self.config = config_manager
+        self.config = storage_cfg
         self.debug_mode = debug_mode
         self.debug_dir = debug_dir
-        self.connection_string = os.getenv('AZURE_STORAGE_CONNECTION_STRING')
-        
-        if not self.connection_string:
-            raise StorageError("AZURE_STORAGE_CONNECTION_STRING must be set in environment variables")
-        
-        # Initialize blob service client
-        self.blob_service_client = BlobServiceClient.from_connection_string(self.connection_string)
-        self.container_name = self.config.blob_container_name
-        
+
+        if not self.config.connection_string:
+            raise StorageError("AZURE_STORAGE_CONNECTION_STRING must be provided in configuration")
+
+        # Initialize blob service client (use injected client if provided)
+        self.blob_service_client = (
+            blob_service_client or BlobServiceClient.from_connection_string(self.config.connection_string)
+        )
+        self.container_name = self.config.container_name
+
         # Track uploaded blobs for cleanup
         self.uploaded_blobs: List[str] = []
-        
+
         # Ensure container exists
         self._ensure_container_exists()
     
@@ -151,7 +160,7 @@ class AzureStorageHandler:
         """
         # Get account name
         account_name = None
-        for part in self.connection_string.split(';'):
+        for part in self.config.connection_string.split(';'):
             if part.startswith('AccountName='):
                 account_name = part.split('=', 1)[1]
                 break
@@ -160,7 +169,7 @@ class AzureStorageHandler:
         
         # Get account key
         account_key = None
-        for part in self.connection_string.split(';'):
+        for part in self.config.connection_string.split(';'):
             if part.startswith('AccountKey='):
                 account_key = part.split('=', 1)[1]
                 break
