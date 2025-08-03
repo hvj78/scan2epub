@@ -62,9 +62,10 @@ class AzureStorageHandler:
         try:
             container_client = self.blob_service_client.get_container_client(self.container_name)
             if not container_client.exists():
-                print(f"Creating blob container: {self.container_name}")
+                import logging
+                logging.getLogger("scan2epub.storage").info(f"Creating blob container: {self.container_name}")
                 container_client.create_container()
-                print(f"Container created successfully")
+                logging.getLogger("scan2epub.storage").info("Container created successfully")
         except AzureError as e:
             raise StorageError(f"Failed to ensure container exists: {str(e)}")
     
@@ -104,7 +105,10 @@ class AzureStorageHandler:
         # Generate unique blob name
         blob_name = self._generate_unique_blob_name(local_path)
         
-        print(f"Uploading {Path(local_path).name} ({file_size / (1024 * 1024):.1f}MB) to Azure...")
+        import logging
+        logging.getLogger("scan2epub.storage").info(
+            f"Uploading {Path(local_path).name} ({file_size / (1024 * 1024):.1f}MB) to Azure..."
+        )
         
         try:
             # Get blob client
@@ -130,7 +134,8 @@ class AzureStorageHandler:
                         progress_hook=progress_callback
                     )
             
-            print(f"Upload complete: {blob_name}")
+            import logging
+            logging.getLogger("scan2epub.storage").info(f"Upload complete: {blob_name}")
             
             # Track this blob for cleanup
             self.uploaded_blobs.append(blob_name)
@@ -139,7 +144,10 @@ class AzureStorageHandler:
             sas_url = self._generate_sas_url(blob_name)
             
             if self.config.debug:
-                print(f"Generated SAS URL (valid for {self.config.sas_token_expiry_hours} hour(s))")
+                import logging
+                logging.getLogger("scan2epub.storage").debug(
+                    f"Generated SAS URL (valid for {self.config.sas_token_expiry_hours} hour(s))"
+                )
             
             return sas_url
             
@@ -178,10 +186,14 @@ class AzureStorageHandler:
         
         # Add a check for typical Azure Storage account key length (88 characters)
         if self.config.debug:
-            print(f"DEBUG: Account key length: {len(account_key)}")
-            print(f"DEBUG: Account key ends with: ...{account_key[-10:]}")
+            import logging
+            logging.getLogger("scan2epub.storage").debug(f"Account key length: {len(account_key)}")
+            logging.getLogger("scan2epub.storage").debug(f"Account key ends with: ...{account_key[-10:]}")
         if len(account_key) != 88:
-            print(f"WARNING: AccountKey length is {len(account_key)}. Azure Storage account keys are typically 88 characters long.")
+            import logging
+            logging.getLogger("scan2epub.storage").warning(
+                f"AccountKey length is {len(account_key)}. Azure Storage account keys are typically 88 characters long."
+            )
 
         try:
             sas_token = generate_blob_sas(
@@ -215,14 +227,16 @@ class AzureStorageHandler:
             blob_client.delete_blob()
             
             if self.config.log_cleanup:
-                print(f"Deleted blob: {blob_name}")
+                import logging
+                logging.getLogger("scan2epub.storage").info(f"Deleted blob: {blob_name}")
             
             if blob_name in self.uploaded_blobs:
                 self.uploaded_blobs.remove(blob_name)
             return True
         except Exception as e:
             if self.config.log_cleanup:
-                print(f"Failed to delete blob {blob_name}: {str(e)}")
+                import logging
+                logging.getLogger("scan2epub.storage").warning(f"Failed to delete blob {blob_name}: {str(e)}")
             return False
     
     def cleanup_all(self) -> Tuple[int, int]:
@@ -233,7 +247,10 @@ class AzureStorageHandler:
         if not self.uploaded_blobs:
             return 0, 0
         
-        print(f"\nCleaning up {len(self.uploaded_blobs)} temporary file(s) from Azure...")
+        import logging
+        logging.getLogger("scan2epub.storage").info(
+            f"Cleaning up {len(self.uploaded_blobs)} temporary file(s) from Azure..."
+        )
         successful = 0
         failed = 0
         
@@ -244,7 +261,10 @@ class AzureStorageHandler:
                 failed += 1
         
         if self.config.log_cleanup:
-            print(f"Cleanup completed: {successful} deleted, {failed} failed")
+            import logging
+            logging.getLogger("scan2epub.storage").info(
+                f"Cleanup completed: {successful} deleted, {failed} failed"
+            )
         
         return successful, failed
 

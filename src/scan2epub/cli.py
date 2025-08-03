@@ -1,5 +1,6 @@
 import argparse
 import os
+import logging
 from pathlib import Path
 from typing import Optional
 
@@ -9,6 +10,7 @@ from scan2epub.config import AppConfig
 from scan2epub.pipeline import run_ocr_to_epub, run_cleanup, run_full_pipeline
 from scan2epub.azure.diagnostics import AzureConfigTester
 from scan2epub.utils.io import get_unique_debug_dir
+from scan2epub.utils.logging import setup_logging
 
 
 def _compute_debug_dir(output_file: str, enabled: bool) -> Optional[Path]:
@@ -66,10 +68,15 @@ def main() -> int:
     # Load typed application config (CLI is the only place that reads env via load_dotenv above)
     app_cfg = AppConfig.from_env_and_ini(args.config if hasattr(args, "config") else None)
 
+    # Initialize logging
+    effective_debug = getattr(args, "debug", False) or app_cfg.processing.debug
+    setup_logging(debug=effective_debug)
+    logger = logging.getLogger("scan2epub.cli")
+
     # Dispatch
     try:
         if args.command == "azure-test":
-            print("Running Azure configuration tests...")
+            logger.info("Running Azure configuration tests...")
             tester = AzureConfigTester()
             success = tester.run_all_tests()
             return 0 if success else 1
@@ -84,11 +91,11 @@ def main() -> int:
             output_file = args.output_epub
 
         if output_file and Path(output_file).suffix.lower() != ".epub":
-            print(f"Error: Output file must have .epub extension, but got {Path(output_file).suffix}")
+            logger.error(f"Output file must have .epub extension, but got {Path(output_file).suffix}")
             return 1
 
         # Compute debug dir if needed
-        debug_enabled = getattr(args, "debug", False) or app_cfg.processing.debug
+        debug_enabled = effective_debug
         debug_dir = _compute_debug_dir(output_file, debug_enabled) if output_file else None
 
         if args.command == "ocr":
@@ -102,7 +109,7 @@ def main() -> int:
                 debug=debug_enabled,
                 debug_dir=debug_dir,
             )
-            print(f"OCR to EPUB conversion completed: {args.input_pdf} -> {args.output_epub}")
+            logger.info(f"OCR to EPUB conversion completed: {args.input_pdf} -> {args.output_epub}")
             return 0
 
         elif args.command == "clean":
@@ -115,7 +122,7 @@ def main() -> int:
                 save_interim=args.save_interim or app_cfg.processing.save_interim,
                 debug_dir=debug_dir,
             )
-            print(f"EPUB cleanup completed: {args.input_epub} -> {args.output_epub}")
+            logger.info(f"EPUB cleanup completed: {args.input_epub} -> {args.output_epub}")
             return 0
 
         elif args.command == "pipeline":
@@ -130,7 +137,7 @@ def main() -> int:
                 save_interim=args.save_interim or app_cfg.processing.save_interim,
                 debug_dir=debug_dir,
             )
-            print(f"Full pipeline completed: {args.input_pdf} -> {args.output_epub}")
+            logger.info(f"Full pipeline completed: {args.input_pdf} -> {args.output_epub}")
             return 0
 
         else:
@@ -138,7 +145,7 @@ def main() -> int:
             return 1
 
     except Exception as e:
-        print(f"Error: {e}")
+        logging.getLogger("scan2epub.cli").exception("Unhandled error during execution")
         return 1
 
 

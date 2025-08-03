@@ -1,3 +1,4 @@
+import logging
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -20,6 +21,7 @@ def run_ocr_to_epub(
     Run OCR on a PDF (local file or URL) and create an EPUB with raw OCR text.
     Returns (output_epub_path, interim_debug_file_or_None)
     """
+    logger = logging.getLogger("scan2epub.pipeline")
     storage_handler: Optional[AzureStorageHandler] = None
     interim_file: Optional[str] = None
 
@@ -117,13 +119,13 @@ def run_full_pipeline(
         target = debug_dir / Path(interim_epub_path).name
         try:
             Path(interim_epub_path).replace(target)
-            print(f"Moved interim file to debug directory: {target}")
+            logging.getLogger("scan2epub.pipeline").info(f"Moved interim file to debug directory: {target}")
         except Exception:
             pass
     else:
         try:
             Path(interim_epub_path).unlink(missing_ok=True)
-            print(f"Cleaned up interim file: {interim_epub_path}")
+            logging.getLogger("scan2epub.pipeline").info(f"Cleaned up interim file: {interim_epub_path}")
         except Exception:
             pass
 
