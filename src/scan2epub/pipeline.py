@@ -72,7 +72,12 @@ def run_cleanup(
     # Import here to avoid circular import and to keep dependency localized
     from scan2epub.epub.cleaner import EPUBOCRCleaner  # type: ignore
 
-    cleaner = EPUBOCRCleaner(debug_mode=debug, debug_dir=debug_dir)
+    # Pass typed Azure OpenAI config into the cleaner (falls back to env if None)
+    cleaner = EPUBOCRCleaner(
+        debug_mode=debug,
+        debug_dir=debug_dir,
+        azure_openai_cfg=cfg.azure_openai,
+    )
     cleaner.clean_epub(input_epub, output_epub, debug=debug, save_interim=save_interim)
     return output_epub
 
