@@ -11,8 +11,8 @@
 - Retained valuable context files: 03_azure_configuration.md, 04_usage_guide.md
 
 ### Project Status
-- **Version**: 1.0 (Functional with Azure dependency)
-- **State**: Production-ready for Hungarian text processing
+- **Version**: 0.1.0 (per pyproject.toml; functional with Azure dependency)
+- **State**: Production-ready for Hungarian text processing for limited use
 - **Primary Use**: Author's family actively using for book conversion
 - **Next Priority**: Local AI model support to eliminate Azure costs
 
@@ -43,8 +43,11 @@
    - Remove old numbered documentation files ✅
 
 2. **Test Current Implementation**:
-   - Verify Azure services are properly configured
-   - Process a sample Hungarian book
+   - Verify Azure services are properly configured (use `scan2epub azure-test`)
+   - Process a sample Hungarian book via new CLI:
+     - `scan2epub ocr <input.pdf> <raw.epub>`
+     - `scan2epub clean <raw.epub> <final.epub> --save-interim`
+     - or `scan2epub pipeline <input.pdf> <final.epub> --save-interim`
    - Document any new issues discovered
 
 ### Short-term Goals
@@ -57,6 +60,11 @@
    - Profile memory usage during large book processing
    - Implement streaming where possible
    - Optimize chunk size calculations
+
+3. **Azure Blob UX improvements**:
+   - Better error messages for connection string issues (AccountKey padding, length hints)
+   - Auto-create container if missing (already implemented)
+   - Optional automatic cleanup toggled via INI (Cleanup section)
 
 ## Active Decisions and Considerations
 
@@ -75,6 +83,10 @@
    - Current graceful degradation works but could be smarter
    - Need better error messages for common issues
    - Consider recovery mechanisms for partial failures
+
+3. **Input Handling**:
+   - Local PDF paths now supported via Azure Blob upload → SAS URL bridge
+   - Ensure `AZURE_STORAGE_CONNECTION_STRING` present; provide actionable diagnostics
 
 ## Important Patterns and Preferences
 
@@ -137,10 +149,10 @@
 ## Context for Next Session
 
 When returning to this project:
-1. Check if Azure services are still configured properly
-2. Review any new issues reported on GitHub
-3. Consider starting with local OCR proof-of-concept
-4. Test with a Hungarian book to ensure quality maintained
-5. Update progress.md with any new developments
+1. Run `scan2epub azure-test` to validate environment (.env + INI + storage + CU + OpenAI)
+2. Test end-to-end with a Hungarian PDF using the pipeline subcommand
+3. Capture interim artifacts via `--debug` and `--save-interim` for analysis
+4. Triage any storage/SAS issues and refine diagnostics
+5. Update progress.md with findings and adjust roadmap
 
 Remember: The primary goal is helping the family read books on their ONYX readers. All decisions should support this goal while making the tool useful for others.

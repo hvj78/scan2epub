@@ -21,16 +21,16 @@
    - HTML generation from plain text
    - Compatible with major e-readers
 
-4. **Processing Modes**:
-   - Full pipeline (PDF → Clean EPUB) tested
-   - OCR-only mode functional
-   - Cleanup-only mode working
-   - Mode selection logic correct
+4. **Processing Modes (CLI subcommands)**:
+   - pipeline (PDF → OCR → cleanup → final EPUB) tested
+   - ocr (PDF → raw OCR EPUB) functional
+   - clean (EPUB → cleaned EPUB) working
+   - azure-test diagnostics command implemented
 
 5. **User Experience**:
-   - Progress bars provide good feedback
-   - Error messages are helpful
-   - Debug mode provides useful information
+   - Progress bars provide good feedback (Azure Blob upload)
+   - Error messages are helpful; storage diagnostics improved
+   - Debug mode provides useful information (debug_dir artifacts)
    - Command-line interface is intuitive
 
 ## What's Left to Build
@@ -43,7 +43,7 @@
    - [ ] Performance comparison tools
 
 2. **Input Improvements**:
-   - [ ] Direct local file processing
+   - [x] Direct local PDF processing via Azure Blob upload → SAS URL
    - [ ] Batch processing capability
    - [ ] Drag-and-drop support
    - [ ] Multiple input format support
@@ -83,7 +83,7 @@
 ## Current Status
 
 ### Development Phase
-- **Version**: 1.0
+- **Version**: 0.1.0 (per pyproject.toml)
 - **Status**: Production (limited use)
 - **Users**: Author's family
 - **Stability**: Good for intended use case
@@ -237,4 +237,4 @@
 
 ---
 
-*Last Updated: January 9, 2025*
+*Last Updated: August 4, 2025*

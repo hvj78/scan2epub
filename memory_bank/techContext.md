@@ -3,14 +3,15 @@
 ## Technology Stack
 
 ### Core Language
-- **Python 3.8+**: Chosen for its excellent library ecosystem and ease of use
+- **Python 3.8+**: Chosen for its excellent library ecosystem and ease of use (packaged via pyproject.toml)
 - **Type Hints**: Used throughout for better code clarity
 
 ### Key Dependencies
 
 #### Azure Integration
-- **openai** (>=1.0.0): Azure OpenAI SDK for GPT-4 integration
+- **openai** (>=1.0.0): Azure OpenAI SDK for GPT-4 integration (chat.completions)
 - **requests** (>=2.31.0): HTTP client for Azure Content Understanding API
+- **azure-storage-blob** (>=12.19.0): Upload local PDFs and generate SAS URLs for CU
 
 #### EPUB Processing
 - **ebooklib** (>=0.18): EPUB file manipulation and creation
@@ -18,9 +19,9 @@
 - **lxml** (>=4.9.0): XML processing backend for BeautifulSoup
 
 #### Utilities
-- **python-dotenv** (>=1.0.0): Environment variable management
-- **tqdm** (>=4.66.0): Progress bar visualization
-- **psutil** (>=5.9.0): System and memory monitoring
+- **python-dotenv** (>=1.0.0): Environment variable management (loaded once in CLI)
+- **tqdm** (>=4.66.0): Progress bar visualization (Azure Blob upload)
+- **psutil** (>=5.9.0): System and memory monitoring (optional in debug)
 
 ## Development Setup
 
@@ -47,19 +48,25 @@ cp .env.template .env
 # Azure AI Content Understanding
 AZURE_CU_API_KEY=your_key_here
 AZURE_CU_ENDPOINT=https://your-resource.services.ai.azure.com/
+AZURE_CU_API_VERSION=2025-05-01-preview
 
 # Azure OpenAI
 AZURE_OPENAI_API_KEY=your_key_here
 AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
 AZURE_OPENAI_API_VERSION=2024-02-15-preview
 AZURE_OPENAI_DEPLOYMENT_NAME=your-gpt4-deployment
+# Back-compat variable also supported by code:
+# AZURE_OPENAI_DEPLOYMENT (preferred in typed config)
 
-# Processing Configuration
+# Processing Configuration (runtime defaults live in code; env is optional)
 MAX_TOKENS_PER_CHUNK=3000
 TEMPERATURE=0.1
 MAX_TOKENS_RESPONSE=4000
 MAX_RETRIES=3
 RETRY_DELAY=2
+
+# Azure Storage (required for local PDF input)
+AZURE_STORAGE_CONNECTION_STRING=DefaultEndpointsProtocol=...;AccountName=...;AccountKey=...==;EndpointSuffix=core.windows.net
 ```
 
 ## Technical Constraints
@@ -101,21 +108,23 @@ RETRY_DELAY=2
 ## Tool Usage Patterns
 
 ### Command Line Interface
+Using the installed console script or `python -m scan2epub.cli`:
+
 ```bash
-# Full pipeline
-python scan2epub.py https://example.com/book.pdf output.epub
+# Full pipeline (accepts local path or URL)
+scan2epub pipeline input.pdf output.epub --language hu --save-interim --debug
 
-# OCR only
-python scan2epub.py https://example.com/book.pdf output.epub --ocr-only
+# OCR only (PDF → raw OCR EPUB)
+scan2epub ocr input.pdf output.epub --language hu --debug
 
-# Cleanup only
-python scan2epub.py input.epub output.epub --cleanup-only
+# Cleanup only (existing EPUB → cleaned EPUB)
+scan2epub clean input.epub output.epub --save-interim --debug
 
-# Debug mode
-python scan2epub.py input.pdf output.epub --debug
+# Azure configuration diagnostics
+scan2epub azure-test
 
-# Memory-efficient mode
-python scan2epub.py large.epub output.epub --cleanup-only --save-interim
+# Use a custom INI config file
+scan2epub pipeline input.pdf output.epub --config path/to/scan2epub.ini
 ```
 
 ### Azure Service Patterns
@@ -203,14 +212,15 @@ client.chat.completions.create(
 ## Integration Points
 
 ### Input Sources
-- **Cloud Storage**: Azure Blob, Google Drive, Dropbox
-- **Direct URLs**: Any publicly accessible URL
-- **Future**: Local file upload support
+- **Local files**: PDF paths (uploaded automatically to Azure Blob for CU)
+- **Direct URLs**: Any publicly accessible URL to PDF
+- **Cloud Storage**: Indirectly supported via URLs (e.g., Azure Blob SAS)
 
 ### Output Targets
 - **Local filesystem**: Direct EPUB file creation
 - **Future**: Cloud storage integration
 - **Future**: Direct e-reader upload
+- Note: Interim artifacts can be written to a debug directory when enabled
 
 ### Monitoring Integration
 - **Azure Monitor**: API usage tracking

@@ -18,9 +18,21 @@ This separation allows:
 ### Modular Component Design
 ```
 scan2epub/
-├── pdf_ocr_processor.py  # OCR concerns only
-├── epub_builder.py       # EPUB construction only
-└── scan2epub.py         # Orchestration + Cleanup
+├── cli.py                # CLI entrypoint with subcommands (ocr/clean/pipeline/azure-test)
+├── pipeline.py           # Orchestration functions: run_ocr_to_epub, run_cleanup, run_full_pipeline
+├── config.py             # Typed application config (AppConfig + Azure configs + Processing)
+├── config_manager.py     # INI-backed defaults and user config handling
+├── utils/
+│   ├── logging.py        # Central logging setup
+│   └── errors.py         # Typed exception hierarchy
+├── azure/
+│   ├── storage.py        # Azure Blob uploads + SAS URL generation and cleanup
+│   └── diagnostics.py    # Azure environment/config test suite (azure-test)
+├── ocr/
+│   └── azure_cu.py       # Azure Content Understanding OCR client + text extraction
+└── epub/
+    ├── builder.py        # Basic EPUB building from text
+    └── cleaner.py        # EPUB cleaning via Azure OpenAI (chunking, LLM calls, HTML reconstruct)
 ```
 
 Each module has a single responsibility and clear interfaces.
@@ -28,7 +40,7 @@ Each module has a single responsibility and clear interfaces.
 ## Key Technical Decisions
 
 ### 1. Azure Services Integration
-**Decision**: Use Azure AI services for both OCR and cleanup
+**Decision**: Use Azure AI services for both OCR and cleanup; Azure Blob for local file upload-to-URL
 **Rationale**: 
 - High quality results, especially for Hungarian
 - Managed service reduces complexity
@@ -38,40 +50,35 @@ Each module has a single responsibility and clear interfaces.
 - Internet dependency
 - Vendor lock-in
 
-### 2. URL-Based PDF Input
-**Decision**: Require PDFs to be accessible via public URL
+### 2. PDF Input Sources: URL or Local Path
+**Decision**: Accept local file paths or URLs. Local files are uploaded to Azure Blob and converted to SAS URLs.
 **Rationale**:
-- Azure Content Understanding API requires URLs
-- Avoids large file uploads in the application
-- Simplifies architecture
+- CU API requires a URL; Blob upload bridges local files → URL
+- Improves UX vs requiring user-hosted URLs
 **Trade-offs**:
-- User must handle file hosting
-- Additional step in workflow
+- Requires valid Storage connection string and container
+- Temporary cloud storage step added
 
 ### 3. Chunked Text Processing
-**Decision**: Split text into ~3000 token chunks for LLM processing
+**Decision**: Split text into ~3000 token "tokens" (≈2 chars per token heuristic) for LLM processing
 **Pattern**:
 ```python
-def chunk_text(text):
-    # Split by paragraphs first
-    # Then by sentences if needed
-    # Force split at character limit
+chunks = chunk_text(text, max_tokens_per_chunk=3000)  # paragraphs -> sentences -> forced split
 ```
 **Rationale**:
-- Respects LLM token limits
-- Maintains context within chunks
-- Prevents mid-sentence splits
+- Respects LLM limits conservatively
+- Prefers paragraph boundaries, then sentences
+- Prevents excessive mid-sentence splits
 
 ### 4. Memory Management Strategy
-**Decision**: Offer --save-interim flag for large files
+**Decision**: Offer --save-interim for large files; optional debug directories for artifacts
 **Pattern**:
-- Process chunks individually
-- Save intermediate results to disk
-- Clear memory after each chunk
+- Process chapters/chunks individually
+- Save interim JSON results when requested
+- Use debug_dir for extracted EPUB and LLM req/resp
 **Rationale**:
-- Handles books of any size
-- Prevents memory exhaustion
-- Allows process resumption
+- Reduces memory footprint on large books
+- Improves debuggability and post-mortem analysis
 
 ## Design Patterns in Use
 
@@ -101,10 +108,11 @@ Benefits:
 - Reusable for different scenarios
 
 ### 3. Strategy Pattern (Processing Modes)
-The main() function implements different strategies:
-- Full pipeline strategy
-- OCR-only strategy  
-- Cleanup-only strategy
+The CLI implements separate strategies via subcommands:
+- pipeline: full pipeline
+- ocr: OCR only (PDF → EPUB)
+- clean: cleanup only (EPUB → cleaned EPUB)
+- azure-test: environment/config diagnostics
 
 ### 4. Template Method Pattern (Cleanup Prompt)
 ```python
@@ -128,39 +136,34 @@ EPUBBuilder
 ```
 
 ### Dependency Structure
-- `scan2epub.py` depends on all other modules
-- `pdf_ocr_processor.py` is independent
-- `epub_builder.py` is independent
-- External dependencies managed via requirements.txt
+- cli.py depends on pipeline and config
+- pipeline.py depends on ocr.azure_cu, epub.builder, epub.cleaner, azure.storage, utils.errors
+- azure.storage uses Azure SDK; config_manager provides INI defaults; config defines typed configs
+- External dependencies declared in pyproject.toml
 
 ## Critical Implementation Paths
 
 ### 1. OCR Processing Path
 ```
-process_pdf(url)
-  → _send_analyze_request(url)
-    → Azure API call (async)
-  → _get_analyze_result(operation_id)
-    → Poll until complete
-  → extract_text_from_ocr_result()
-    → Return markdown text
+run_ocr_to_epub(cfg, input_path, output_epub, language, debug, debug_dir)
+  → if local: AzureStorageHandler.upload_pdf() → SAS URL
+  → PDFOCRProcessor.process_pdf(pdf_url)
+      → _send_analyze_request(url) → returns operation_id
+      → _get_analyze_result(operation_id) → polls until Succeeded
+  → extract_text_from_ocr_result(result) → markdown concatenation
+  → EPUBBuilder.set_metadata(...); add_chapter(...); build_epub(output_epub)
 ```
 
 ### 2. Cleanup Processing Path
 ```
-clean_epub(input_path)
-  → extract_epub_content()
-    → Parse with BeautifulSoup
-  → analyze_ocr_artifacts()
-    → Identify issues
-  → chunk_text()
-    → Split for LLM
-  → clean_text_with_llm()
-    → Azure GPT-4 processing
-  → reconstruct_html()
-    → Build clean structure
-  → create_cleaned_epub()
-    → Generate final file
+run_cleanup(cfg, input_epub, output_epub, debug, save_interim, debug_dir)
+  → EPUBOCRCleaner(..., azure_openai_cfg=cfg.azure_openai).clean_epub()
+     → extract_epub_content(): unzip + ebooklib + BeautifulSoup
+     → analyze_ocr_artifacts(): regex metrics
+     → chunk_text(): paragraphs → sentences → forced split
+     → clean_text_with_llm(): Azure OpenAI chat.completions
+     → reconstruct_html(): paragraphs/headings heuristic
+     → create_cleaned_epub(): build final EPUB via ebooklib
 ```
 
 ### 3. Error Handling Path
@@ -173,19 +176,20 @@ clean_epub(input_path)
 
 ### Async Operation Handling
 ```python
-# Submit request
 operation_id = self._send_analyze_request(pdf_url)
-
-# Poll for completion
-while status not in ["Succeeded", "Failed"]:
-    time.sleep(retry_delay)
-    result = self._get_analyze_result(operation_id)
+# Polling with backoff and status prints
+for attempt in range(max_retries):
+    result = requests.get(result_url)
+    status = result["status"]
+    if status == "Succeeded": ...
+    elif status in ["Running", "NotStarted"]:
+        time.sleep(retry_delay)
 ```
 
 ### Progress Indication
-- tqdm for visual progress bars
-- Chunk-by-chunk processing feedback
-- Status messages at each stage
+- tqdm progress bar for Azure Blob upload
+- Logger info for chapter processing and artifacts
+- Console prints for CU status polling
 
 ### Resource Optimization
 - Lazy loading of content
