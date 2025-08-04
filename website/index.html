@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>scan2epub — Szkennelt könyvekből tiszta EPUB | Convert scanned books to clean EPUB</title>
+  <meta name="description" content="scan2epub: Python eszköz szkennelt (főleg magyar) könyvek AI-alapú tisztításához és EPUB konvertálásához. Hungarian-first OCR cleanup, EPUB generation, CLI.">
+  <!-- Inline SVG favicon as data URL to avoid filesystem issue -->
+  <link rel="icon" type="image/svg+xml" href='data:image/svg+xml,<?xml version="1.0" encoding="UTF-8"?><svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256"><defs><linearGradient id="g" x1="0" y1="0" x2="256" y2="256" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="%231E3A8A"/><stop offset="1" stop-color="%230EA5E9"/></linearGradient></defs><rect x="16" y="16" width="224" height="224" rx="36" fill="url(%23g)"/><path d="M70 76h74c14 0 26 12 26 26v78c0 4-3 7-7 7H70c-4 0-7-3-7-7V83c0-4 3-7 7-7z" fill="%23ffffff" opacity="0.95"/><path d="M170 94h16c4 0 7 3 7 7v79c0 4-3 7-7 7h-16" stroke="%23ffffff" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/><g fill="%230b0b0e"><path d="M86 176c-9 0-16-4-16-12 0-16 31-10 31-20 0-4-4-6-10-6-6 0-11 2-16 5l-5-9c6-4 14-7 23-7 13 0 22 6 22 16 0 17-31 11-31 20 0 3 3 5 9 5 6 0 12-2 17-5l5 9c-6 4-14 7-23 7z"/><path d="M121 176v-48h36v10h-24v9h21v10h-21v9h25v10h-37z"/><path d="M167 176v-10h24c2 0 3-1 3-2 0-2-1-3-3-3h-13c-9 0-14-4-14-12 0-9 7-14 19-14h28v10h-26c-3 0-5 1-5 3s2 3 5 3h13c9 0 14 4 14 12 0 9-7 14-19 14h-26z"/></g></svg>'>
+  <meta property="og:title" content="scan2epub — PDF to clean EPUB with AI">
+  <meta property="og:description" content="Convert scanned Hungarian books into clean, readable EPUBs using OCR and AI cleanup. CLI tool.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://scan2epub.hvj.hu/">
+  <meta property="og:image" content="assets/social-preview.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="scan2epub — PDF to clean EPUB with AI">
+  <meta name="twitter:description" content="Hungarian-first OCR cleanup and EPUB generation.">
+  <meta name="twitter:image" content="assets/social-preview.png">
+  <link rel="preload" as="style" href="styles.css" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <a class="skip-link" href="#content">Skip to content</a>
+  <header class="site-header">
+    <div class="container">
+      <div class="brand">
+        <img src="assets/favicon.svg" alt="" class="logo" />
+        <span class="brand-name">scan2epub</span>
+      </div>
+      <nav class="site-nav" aria-label="Primary">
+        <a href="#what" data-i18n="nav_what" class="i18n">What</a>
+        <a href="#features" data-i18n="nav_features" class="i18n">Features</a>
+        <a href="#quickstart" data-i18n="nav_quickstart" class="i18n">Quick Start</a>
+        <a href="#roadmap" data-i18n="nav_roadmap" class="i18n">Roadmap</a>
+        <a href="#who" data-i18n="nav_who" class="i18n">Who</a>
+        <a href="#faq" data-i18n="nav_faq" class="i18n">FAQ</a>
+        <a href="https://github.com/hvj78/scan2epub" target="_blank" rel="noopener" class="btn btn-ghost">GitHub</a>
+        <button id="langToggle" class="btn btn-primary" type="button" aria-live="polite">HU</button>
+      </nav>
+    </div>
+  </header>
+
+  <main id="content">
+    <section class="hero">
+      <div class="container">
+        <h1 class="hero-title">
+          <span class="i18n" data-i18n="hero_title_en" lang="en">Convert scanned Hungarian books into clean EPUBs using AI</span>
+          <span class="i18n" data-i18n="hero_title_hu" lang="hu">Szkennelt magyar könyvekből tiszta EPUB AI segítségével</span>
+        </h1>
+        <p class="hero-sub">
+          <span class="i18n" data-i18n="hero_sub_en" lang="en">OCR the PDF, clean up artifacts, and generate reader‑friendly EPUBs. CLI tool, Hungarian‑first.</span>
+          <span class="i18n" data-i18n="hero_sub_hu" lang="hu">OCR a PDF-ből, AI‑alapú tisztítás, olvasóbarát EPUB. Parancssoros eszköz, magyar szövegre optimalizálva.</span>
+        </p>
+        <div class="hero-ctas">
+          <a class="btn btn-primary" href="https://github.com/hvj78/scan2epub" target="_blank" rel="noopener">
+            <span class="i18n" data-i18n="cta_github_en" lang="en">View on GitHub</span>
+            <span class="i18n" data-i18n="cta_github_hu" lang="hu">Megnyitás GitHubon</span>
+          </a>
+          <a class="btn btn-secondary" href="#quickstart">
+            <span class="i18n" data-i18n="cta_quickstart_en" lang="en">Quick Start</span>
+            <span class="i18n" data-i18n="cta_quickstart_hu" lang="hu">Gyors kezdés</span>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <section id="what" class="section">
+      <div class="container">
+        <h2>
+          <span class="i18n" data-i18n="what_title_en" lang="en">What it does</span>
+          <span class="i18n" data-i18n="what_title_hu" lang="hu">Mit tud az eszköz</span>
+        </h2>
+        <p class="lead">
+          <span class="i18n" data-i18n="what_lead_en" lang="en">
+            scan2epub converts scanned or photographed PDF books into clean, readable EPUBs. It uses Azure OCR to extract text and AI to intelligently clean up OCR artifacts — optimized for Hungarian.
+          </span>
+          <span class="i18n" data-i18n="what_lead_hu" lang="hu">
+            A scan2epub a szkennelt vagy fotózott PDF könyveket tiszta, jól olvasható EPUB formátumba konvertálja. Azure OCR-t használ a szöveg kinyerésére, és AI-t az OCR hibák intelligens javítására — magyar nyelvre optimalizálva.
+          </span>
+        </p>
+        <div class="grid grid-3">
+          <div class="card">
+            <h3>PDF → EPUB</h3>
+            <p class="i18n" data-i18n="what_item1_en" lang="en">Accepts publicly accessible PDF URLs and produces structured EPUBs.</p>
+            <p class="i18n" data-i18n="what_item1_hu" lang="hu">Nyilvánosan elérhető PDF URL-t fogad és strukturált EPUB-ot készít.</p>
+          </div>
+          <div class="card">
+            <h3>OCR + Cleanup</h3>
+            <p class="i18n" data-i18n="what_item2_en" lang="en">Azure OCR for text extraction; AI removes hyphenation, stray line breaks, and artifacts.</p>
+            <p class="i18n" data-i18n="what_item2_hu" lang="hu">Azure OCR a szöveghez; az AI eltávolítja a kötőjeleket, felesleges sortöréseket és OCR hibákat.</p>
+          </div>
+          <div class="card">
+            <h3>Flexible Modes</h3>
+            <p class="i18n" data-i18n="what_item3_en" lang="en">Full pipeline, OCR-only, or cleanup-only — choose what you need.</p>
+            <p class="i18n" data-i18n="what_item3_hu" lang="hu">Teljes folyamat, csak OCR vagy csak tisztítás — igény szerint választható.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="features" class="section alt">
+      <div class="container">
+        <h2>
+          <span class="i18n" data-i18n="features_title_en" lang="en">Key features</span>
+          <span class="i18n" data-i18n="features_title_hu" lang="hu">Fő funkciók</span>
+        </h2>
+        <ul class="feature-list">
+          <li>
+            <strong>Hungarian‑first cleanup:</strong>
+            <span class="i18n" data-i18n="feat1_en" lang="en">handles hyphenation rules and special characters.</span>
+            <span class="i18n" data-i18n="feat1_hu" lang="hu">kezeli a magyar elválasztási szabályokat és a speciális karaktereket.</span>
+          </li>
+          <li>
+            <strong>Clean EPUB formatting:</strong>
+            <span class="i18n" data-i18n="feat2_en" lang="en">preserves book structure for e‑readers.</span>
+            <span class="i18n" data-i18n="feat2_hu" lang="hu">megőrzi a könyv szerkezetét e‑olvasókhoz.</span>
+          </li>
+          <li>
+            <strong>Progress &amp; errors:</strong>
+            <span class="i18n" data-i18n="feat3_en" lang="en">clear feedback during long operations.</span>
+            <span class="i18n" data-i18n="feat3_hu" lang="hu">áttekinthető visszajelzés hosszú feldolgozás közben.</span>
+          </li>
+          <li>
+            <strong>Flexible CLI:</strong>
+            <span class="i18n" data-i18n="feat4_en" lang="en">full, OCR‑only, and cleanup‑only modes.</span>
+            <span class="i18n" data-i18n="feat4_hu" lang="hu">teljes, csak OCR és csak tisztítás módok.</span>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="quickstart" class="section">
+      <div class="container">
+        <h2>
+          <span class="i18n" data-i18n="qs_title_en" lang="en">Quick Start</span>
+          <span class="i18n" data-i18n="qs_title_hu" lang="hu">Gyors kezdés</span>
+        </h2>
+        <div class="grid grid-2">
+          <div>
+            <h3 class="i18n" data-i18n="qs_require_en" lang="en">Requirements</h3>
+            <h3 class="i18n" data-i18n="qs_require_hu" lang="hu">Követelmények</h3>
+            <ul>
+              <li class="i18n" data-i18n="qs_r1_en" lang="en">Python environment</li>
+              <li class="i18n" data-i18n="qs_r1_hu" lang="hu">Python környezet</li>
+              <li class="i18n" data-i18n="qs_r2_en" lang="en">Azure keys (Content Understanding + OpenAI)</li>
+              <li class="i18n" data-i18n="qs_r2_hu" lang="hu">Azure kulcsok (Content Understanding + OpenAI)</li>
+              <li class="i18n" data-i18n="qs_r3_en" lang="en">Publicly accessible PDF URL</li>
+              <li class="i18n" data-i18n="qs_r3_hu" lang="hu">Nyilvánosan elérhető PDF URL</li>
+            </ul>
+          </div>
+          <div>
+            <h3 class="i18n" data-i18n="qs_example_en" lang="en">Example</h3>
+            <h3 class="i18n" data-i18n="qs_example_hu" lang="hu">Példa</h3>
+            <pre class="code"><code id="cmd">scan2epub --pdf-url "https://example.com/book.pdf" --mode full</code></pre>
+            <div class="btn-row">
+              <button class="btn btn-secondary" id="copyBtn">
+                <span class="i18n" data-i18n="copy_en" lang="en">Copy command</span>
+                <span class="i18n" data-i18n="copy_hu" lang="hu">Parancs másolása</span>
+              </button>
+              <a class="btn btn-ghost" href="https://github.com/hvj78/scan2epub#readme" target="_blank" rel="noopener">
+                <span class="i18n" data-i18n="readme_en" lang="en">Read the README</span>
+                <span class="i18n" data-i18n="readme_hu" lang="hu">Olvasd el a README-t</span>
+              </a>
+            </div>
+          </div>
+        </div>
+        <p class="note">
+          <span class="i18n" data-i18n="qs_note_en" lang="en">Note: Current version depends on Azure services and public PDF URLs. Processing time is typically 10–30 minutes.</span>
+          <span class="i18n" data-i18n="qs_note_hu" lang="hu">Megjegyzés: A jelenlegi verzió Azure szolgáltatásokat és nyilvános PDF URL-t igényel. A feldolgozás jellemzően 10–30 perc.</span>
+        </p>
+      </div>
+    </section>
+
+    <section id="roadmap" class="section alt">
+      <div class="container">
+        <h2>
+          <span class="i18n" data-i18n="roadmap_title_en" lang="en">Roadmap</span>
+          <span class="i18n" data-i18n="roadmap_title_hu" lang="hu">Ütemterv</span>
+        </h2>
+        <div class="grid grid-3">
+          <div class="card">
+            <h3 class="i18n" data-i18n="rm_s_en" lang="en">Short term (2025)</h3>
+            <h3 class="i18n" data-i18n="rm_s_hu" lang="hu">Rövid táv (2025)</h3>
+            <ul>
+              <li class="i18n" data-i18n="rm_s1_en" lang="en">Local AI to remove Azure dependency</li>
+              <li class="i18n" data-i18n="rm_s1_hu" lang="hu">Helyi AI Azure-függőség nélkül</li>
+              <li class="i18n" data-i18n="rm_s2_en" lang="en">Better memory efficiency</li>
+              <li class="i18n" data-i18n="rm_s2_hu" lang="hu">Jobb memóriahatékonyság</li>
+              <li class="i18n" data-i18n="rm_s3_en" lang="en">Batch processing</li>
+              <li class="i18n" data-i18n="rm_s3_hu" lang="hu">Kötegelt feldolgozás</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3 class="i18n" data-i18n="rm_m_en" lang="en">Medium term (2026–2027)</h3>
+            <h3 class="i18n" data-i18n="rm_m_hu" lang="hu">Közép táv (2026–2027)</h3>
+            <ul>
+              <li class="i18n" data-i18n="rm_m1_en" lang="en">Multi-language support</li>
+              <li class="i18n" data-i18n="rm_m1_hu" lang="hu">Többnyelvű támogatás</li>
+              <li class="i18n" data-i18n="rm_m2_en" lang="en">GUI interface</li>
+              <li class="i18n" data-i18n="rm_m2_hu" lang="hu">Grafikus felület</li>
+              <li class="i18n" data-i18n="rm_m3_en" lang="en">Image preservation</li>
+              <li class="i18n" data-i18n="rm_m3_hu" lang="hu">Képek megőrzése</li>
+              <li class="i18n" data-i18n="rm_m4_en" lang="en">Advanced formatting</li>
+              <li class="i18n" data-i18n="rm_m4_hu" lang="hu">Fejlett formázás</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3 class="i18n" data-i18n="rm_l_en" lang="en">Long term (2028+)</h3>
+            <h3 class="i18n" data-i18n="rm_l_hu" lang="hu">Hosszú táv (2028+)</h3>
+            <ul>
+              <li class="i18n" data-i18n="rm_l1_en" lang="en">Industry-standard tool</li>
+              <li class="i18n" data-i18n="rm_l1_hu" lang="hu">Iparági szintű eszköz</li>
+              <li class="i18n" data-i18n="rm_l2_en" lang="en">Comprehensive language coverage</li>
+              <li class="i18n" data-i18n="rm_l2_hu" lang="hu">Átfogó nyelvi lefedettség</li>
+              <li class="i18n" data-i18n="rm_l3_en" lang="en">Integration ecosystem</li>
+              <li class="i18n" data-i18n="rm_l3_hu" lang="hu">Integrációs ökoszisztéma</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="who" class="section">
+      <div class="container">
+        <h2>
+          <span class="i18n" data-i18n="who_title_en" lang="en">Who is it for</span>
+          <span class="i18n" data-i18n="who_title_hu" lang="hu">Kinek szól</span>
+        </h2>
+        <div class="grid grid-3">
+          <div class="card">
+            <h3 class="i18n" data-i18n="who1_en" lang="en">Family readers (ONYX)</h3>
+            <h3 class="i18n" data-i18n="who1_hu" lang="hu">Családi olvasók (ONYX)</h3>
+            <p class="i18n" data-i18n="who1p_en" lang="en">Readable EPUBs from hard‑to‑find Hungarian books.</p>
+            <p class="i18n" data-i18n="who1p_hu" lang="hu">Olvasható EPUB régi, nehezen beszerezhető magyar könyvekből.</p>
+          </div>
+          <div class="card">
+            <h3 class="i18n" data-i18n="who2_en" lang="en">Book digitizers</h3>
+            <h3 class="i18n" data-i18n="who2_hu" lang="hu">Digitalizálók</h3>
+            <p class="i18n" data-i18n="who2p_en" lang="en">Automates tedious OCR cleanup, saves time.</p>
+            <p class="i18n" data-i18n="who2p_hu" lang="hu">Automatizálja az OCR‑tisztítást, időt spórol.</p>
+          </div>
+          <div class="card">
+            <h3 class="i18n" data-i18n="who3_en" lang="en">Developers</h3>
+            <h3 class="i18n" data-i18n="who3_hu" lang="hu">Fejlesztők</h3>
+            <p class="i18n" data-i18n="who3p_en" lang="en">Open‑source, modular code for contributions.</p>
+            <p class="i18n" data-i18n="who3p_hu" lang="hu">Nyílt forráskódú, moduláris – könnyen bővíthető.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="faq" class="section alt">
+      <div class="container">
+        <h2>FAQ</h2>
+        <details>
+          <summary class="i18n" data-i18n="faq1_q_en" lang="en">Why do I need a public PDF URL?</summary>
+          <summary class="i18n" data-i18n="faq1_q_hu" lang="hu">Miért kell nyilvános PDF URL?</summary>
+          <div class="details-body">
+            <p class="i18n" data-i18n="faq1_a_en" lang="en">Current version processes PDFs via URL to manage memory and pipeline constraints. Local files are not supported yet.</p>
+            <p class="i18n" data-i18n="faq1_a_hu" lang="hu">A jelenlegi verzió URL‑en keresztül dolgozza fel a PDF‑eket a memória és a folyamat korlátai miatt. Helyi fájlok támogatása még nincs.</p>
+          </div>
+        </details>
+        <details>
+          <summary class="i18n" data-i18n="faq2_q_en" lang="en">How does the Hungarian cleanup work?</summary>
+          <summary class="i18n" data-i18n="faq2_q_hu" lang="hu">Hogyan működik a magyar nyelvi tisztítás?</summary>
+          <div class="details-body">
+            <p class="i18n" data-i18n="faq2_a_en" lang="en">AI removes OCR artifacts like hyphenation at line breaks, stray line breaks, and page numbers, preserving structure and characters.</p>
+            <p class="i18n" data-i18n="faq2_a_hu" lang="hu">Az AI eltávolítja az OCR hibákat (sorközi elválasztás, felesleges sortörések, oldalszámok), megőrizve a szerkezetet és karaktereket.</p>
+          </div>
+        </details>
+        <details>
+          <summary class="i18n" data-i18n="faq3_q_en" lang="en">What about costs?</summary>
+          <summary class="i18n" data-i18n="faq3_q_hu" lang="hu">Mi a helyzet a költségekkel?</summary>
+          <div class="details-body">
+            <p class="i18n" data-i18n="faq3_a_en" lang="en">The tool relies on Azure services which may incur API costs per book; roadmap includes local AI to remove this dependency.</p>
+            <p class="i18n" data-i18n="faq3_a_hu" lang="hu">A megoldás Azure szolgáltatásokat használ, ami könyvenként API‑költséget jelenthet; a terv a helyi AI bevezetése a függőség csökkentésére.</p>
+          </div>
+        </details>
+        <details>
+          <summary class="i18n" data-i18n="faq4_q_en" lang="en">Can it handle large books?</summary>
+          <summary class="i18n" data-i18n="faq4_q_hu" lang="hu">Kezel nagy könyveket?</summary>
+          <div class="details-body">
+            <p class="i18n" data-i18n="faq4_a_en" lang="en">Yes, with memory‑aware processing and progress feedback; extremely large inputs may still be constrained.</p>
+            <p class="i18n" data-i18n="faq4_a_hu" lang="hu">Igen, memória‑tudatos feldolgozással és státuszjelzéssel; rendkívül nagy fájloknál lehetnek korlátok.</p>
+          </div>
+        </details>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container">
+      <div class="foot-grid">
+        <div>
+          <strong>scan2epub</strong>
+          <p class="i18n" data-i18n="foot_tag_en" lang="en">A small tool to turn scanned Hungarian books into clean EPUBs.</p>
+          <p class="i18n" data-i18n="foot_tag_hu" lang="hu">Kis eszköz a szkennelt magyar könyvek tiszta EPUB‑jához.</p>
+        </div>
+        <div>
+          <ul class="foot-links">
+            <li><a href="https://github.com/hvj78/scan2epub" rel="noopener" target="_blank">GitHub</a></li>
+            <li><a href="https://hvj.hu" target="_blank" rel="noopener">hvj.hu</a></li>
+            <li><a href="LICENSE" target="_blank" rel="noopener">License</a></li>
+          </ul>
+        </div>
+        <div class="foot-meta">
+          <small>&copy; <span id="year"></span> hvj.hu</small>
+          <small>scan2epub.hvj.hu</small>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script src="script.js" defer></script>
+</body>
+</html>
