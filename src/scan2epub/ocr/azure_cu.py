@@ -49,7 +49,7 @@ class PDFOCRProcessor:
         """
         result_url = f"{self.endpoint}/contentunderstanding/analyzerResults/{operation_id}?api-version={self.api_version}"
         max_retries = 60  # Increased retries for async operation
-        retry_delay = 10  # Increased delay
+        retry_delay = 2   # Lower delay per user request
         
         for attempt in range(max_retries):
             try:

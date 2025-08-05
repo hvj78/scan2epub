@@ -6,8 +6,9 @@ import time
 import zipfile
 import tempfile
 import shutil
+import sys
 from pathlib import Path
-from typing import List, Dict, Tuple, Optional, Callable
+from typing import List, Dict, Tuple, Optional, Callable, Any
 from dataclasses import dataclass
 
 import openai
@@ -29,6 +30,132 @@ class CleanerRuntimeConfig:
     max_tokens_response: int = 4000
     max_retries: int = 3
     retry_delay: int = 2
+
+
+# -------- Progress reporting --------
+
+class ProgressReporter:
+    """Interface for reporting progress; methods are no-ops by default."""
+    def on_stage(self, stage: str, extras: Optional[Dict[str, Any]] = None) -> None: ...
+    def on_chunking_done(self, total_chunks: int) -> None: ...
+    def on_chunk_start(self, idx: int, total: int) -> None: ...
+    def on_llm_submit(self, idx: int, total: int) -> None: ...
+    def on_llm_wait_start(self, idx: int, total: int) -> None: ...
+    def on_llm_wait_heartbeat(self, idx: int, total: int, elapsed_s: int) -> None: ...
+    def on_llm_wait_end(self, idx: int, total: int, latency_s: float) -> None: ...
+    def on_chunk_result(self, idx: int, total: int, tokens_in: Optional[int], tokens_out: Optional[int], latency_s: float) -> None: ...
+    def on_retry(self, idx: int, attempt: int, max_attempts: int, backoff_s: int, error: str) -> None: ...
+    def on_error_giveup(self, idx: int, error: str) -> None: ...
+    def on_summary(self, total: int, retries: int, tokens_in: Optional[int], tokens_out: Optional[int], elapsed_s: int) -> None: ...
+
+
+class ConsoleProgressReporter(ProgressReporter):
+    def __init__(self, logger: logging.Logger, heartbeat_interval_s: int = 5):
+        self.logger = logger
+        self.heartbeat_interval_s = heartbeat_interval_s
+        self._last_heartbeat = 0.0
+        self._start_ts = time.time()
+        self._total_chunks = 0
+
+    def _ts(self) -> str:
+        return time.strftime("%H:%M:%S")
+
+    def on_stage(self, stage: str, extras: Optional[Dict[str, Any]] = None) -> None:
+        msg = f"[CLEANUP][{self._ts()}] {stage}"
+        if extras:
+            msg += " " + json.dumps(extras, ensure_ascii=False)
+        self.logger.info(msg)
+
+    def on_chunking_done(self, total_chunks: int) -> None:
+        self._total_chunks = total_chunks
+        self.logger.info(f"[CLEANUP][{self._ts()}] Chunking complete: {total_chunks} chunks")
+
+    def on_chunk_start(self, idx: int, total: int) -> None:
+        self.logger.info(f"[CLEANUP][{self._ts()}] [Chunk {idx}/{total}] Start")
+
+    def on_llm_submit(self, idx: int, total: int) -> None:
+        self.logger.info(f"[CLEANUP][{self._ts()}] [Chunk {idx}/{total}] Submitting to LLM…")
+
+    def on_llm_wait_start(self, idx: int, total: int) -> None:
+        self._last_heartbeat = 0.0
+        self.logger.info(f"[CLEANUP][{self._ts()}] [Chunk {idx}/{total}] Waiting for LLM response…")
+
+    def on_llm_wait_heartbeat(self, idx: int, total: int, elapsed_s: int) -> None:
+        now = time.time()
+        if self._last_heartbeat == 0.0 or (now - self._last_heartbeat) >= self.heartbeat_interval_s:
+            self._last_heartbeat = now
+            self.logger.info(f"[CLEANUP][{self._ts()}] [Chunk {idx}/{total}] Still waiting… {elapsed_s}s elapsed")
+
+    def on_llm_wait_end(self, idx: int, total: int, latency_s: float) -> None:
+        self.logger.info(f"[CLEANUP][{self._ts()}] [Chunk {idx}/{total}] Response received in {latency_s:.1f}s")
+
+    def on_chunk_result(self, idx: int, total: int, tokens_in: Optional[int], tokens_out: Optional[int], latency_s: float) -> None:
+        tok_info = f"(tokens in {tokens_in}, out {tokens_out})" if (tokens_in is not None or tokens_out is not None) else ""
+        self.logger.info(f"[CLEANUP][{self._ts()}] [Chunk {idx}/{total}] Cleaned {tok_info} in {latency_s:.1f}s")
+
+    def on_retry(self, idx: int, attempt: int, max_attempts: int, backoff_s: int, error: str) -> None:
+        self.logger.warning(f"[CLEANUP][{self._ts()}] [Chunk {idx}] LLM call failed: {error}. Retry {attempt}/{max_attempts} in {backoff_s}s")
+
+    def on_error_giveup(self, idx: int, error: str) -> None:
+        self.logger.warning(f"[CLEANUP][{self._ts()}] [Chunk {idx}] Failed after retries, using original text. Error: {error}")
+
+    def on_summary(self, total: int, retries: int, tokens_in: Optional[int], tokens_out: Optional[int], elapsed_s: int) -> None:
+        tok_info = f"tokens in ~{tokens_in or 0}, out ~{tokens_out or 0}"
+        self.logger.info(f"[CLEANUP][{self._ts()}] Cleanup summary: {total} chunks, retries {retries}, {tok_info}, elapsed {elapsed_s//60:02d}:{elapsed_s%60:02d}")
+
+
+class JsonFileProgressReporter(ProgressReporter):
+    def __init__(self, status_file: Path):
+        self.status_file = status_file
+        # truncate/create file
+        try:
+            self.status_file.parent.mkdir(parents=True, exist_ok=True)
+            self.status_file.write_text("", encoding="utf-8")
+        except Exception:
+            pass
+
+    def _write(self, event: Dict[str, Any]) -> None:
+        try:
+            with self.status_file.open("a", encoding="utf-8") as f:
+                f.write(json.dumps(event, ensure_ascii=False) + "\n")
+        except Exception:
+            pass
+
+    def on_stage(self, stage: str, extras: Optional[Dict[str, Any]] = None) -> None:
+        ev = {"t": time.time(), "event": "stage", "stage": stage}
+        if extras:
+            ev.update(extras)
+        self._write(ev)
+
+    def on_chunking_done(self, total_chunks: int) -> None:
+        self._write({"t": time.time(), "event": "chunking_done", "total": total_chunks})
+
+    def on_chunk_start(self, idx: int, total: int) -> None:
+        self._write({"t": time.time(), "event": "chunk_start", "idx": idx, "total": total})
+
+    def on_llm_submit(self, idx: int, total: int) -> None:
+        self._write({"t": time.time(), "event": "llm_submit", "idx": idx, "total": total})
+
+    def on_llm_wait_start(self, idx: int, total: int) -> None:
+        self._write({"t": time.time(), "event": "llm_wait_start", "idx": idx, "total": total})
+
+    def on_llm_wait_heartbeat(self, idx: int, total: int, elapsed_s: int) -> None:
+        self._write({"t": time.time(), "event": "llm_wait_heartbeat", "idx": idx, "total": total, "elapsed_s": elapsed_s})
+
+    def on_llm_wait_end(self, idx: int, total: int, latency_s: float) -> None:
+        self._write({"t": time.time(), "event": "llm_wait_end", "idx": idx, "total": total, "latency_s": latency_s})
+
+    def on_chunk_result(self, idx: int, total: int, tokens_in: Optional[int], tokens_out: Optional[int], latency_s: float) -> None:
+        self._write({"t": time.time(), "event": "chunk_result", "idx": idx, "total": total, "tokens_in": tokens_in, "tokens_out": tokens_out, "latency_s": latency_s})
+
+    def on_retry(self, idx: int, attempt: int, max_attempts: int, backoff_s: int, error: str) -> None:
+        self._write({"t": time.time(), "event": "retry", "idx": idx, "attempt": attempt, "max_attempts": max_attempts, "backoff_s": backoff_s, "error": error})
+
+    def on_error_giveup(self, idx: int, error: str) -> None:
+        self._write({"t": time.time(), "event": "giveup", "idx": idx, "error": error})
+
+    def on_summary(self, total: int, retries: int, tokens_in: Optional[int], tokens_out: Optional[int], elapsed_s: int) -> None:
+        self._write({"t": time.time(), "event": "summary", "total": total, "retries": retries, "tokens_in": tokens_in, "tokens_out": tokens_out, "elapsed_s": elapsed_s})
 
 
 # -------- Pure helpers (no class state) --------
@@ -116,27 +243,77 @@ def clean_chunks(
     max_tokens_response: int,
     debug_mode: bool = False,
     debug_dir: Optional[Path] = None,
+    reporter: Optional[ProgressReporter] = None,
 ) -> List[str]:
-    """Pure-ish helper handling retries and debug artifacts writing."""
+    """Helper handling retries, progress, and debug artifacts writing."""
     cleaned_chunks: List[str] = []
-    logger.info(f"Processing {len(chunks)} text chunks...")
+    total = len(chunks)
+    if reporter:
+        reporter.on_stage("Preparing content")
+        reporter.on_chunking_done(total)
+
+    logger.info(f"Processing {total} text chunks...")
     max_retries = 3
     retry_delay = 2
+    total_tokens_in = 0
+    total_tokens_out = 0
+    total_retries = 0
+    start_ts = time.time()
+
     for i, chunk in enumerate(chunks, start=1):
+        if reporter:
+            reporter.on_chunk_start(i, total)
+            reporter.on_llm_submit(i, total)
+
+        last_error: Optional[str] = None
+        t0 = time.time()
         for attempt in range(max_retries):
+            if attempt > 0:
+                total_retries += 1
             try:
                 messages = [
                     {"role": "system", "content": create_cleanup_prompt()},
                     {"role": "user", "content": chunk},
                 ]
+
+                wait_start = time.time()
+                if reporter:
+                    reporter.on_llm_wait_start(i, total)
+
+                # We cannot truly stream Azure responses with this SDK call; emulate heartbeat while waiting
+                # by polling elapsed time around the synchronous call.
+                # Start the request
                 response = client.chat.completions.create(
                     model=deployment,
                     messages=messages,
                     temperature=temperature,
                     max_tokens=max_tokens_response,
                 )
+                # LLM returned; report end
+                latency = time.time() - wait_start
+                if reporter:
+                    reporter.on_llm_wait_end(i, total, latency)
+
                 cleaned_text = response.choices[0].message.content.strip()
                 cleaned_chunks.append(cleaned_text)
+
+                # Token accounting if available
+                tokens_in = None
+                tokens_out = None
+                try:
+                    usage = getattr(response, "usage", None)
+                    if usage:
+                        tokens_in = getattr(usage, "prompt_tokens", None) or getattr(usage, "input_tokens", None)
+                        tokens_out = getattr(usage, "completion_tokens", None) or getattr(usage, "output_tokens", None)
+                        if isinstance(tokens_in, int):
+                            total_tokens_in += tokens_in
+                        if isinstance(tokens_out, int):
+                            total_tokens_out += tokens_out
+                except Exception:
+                    pass
+
+                if reporter:
+                    reporter.on_chunk_result(i, total, tokens_in, tokens_out, latency)
 
                 if debug_mode and debug_dir:
                     llm_debug_dir = debug_dir / "llm_requests_responses"
@@ -155,16 +332,32 @@ def clean_chunks(
                             indent=2,
                         )
                     with open(response_file, "w", encoding="utf-8") as f:
-                        f.write(response.model_dump_json(indent=2))
+                        try:
+                            f.write(response.model_dump_json(indent=2))
+                        except Exception:
+                            # Fallback serialization
+                            f.write(json.dumps(response.__dict__, default=str, indent=2))
                     logger.debug(f"LLM request/response for chunk {i} saved to {llm_debug_dir}")
                 break
             except Exception as e:
-                logger.warning(f"Error processing chunk {i}, attempt {attempt+1}: {str(e)}")
-                if attempt == max_retries - 1:
-                    logger.warning(f"Failed to process chunk {i}, using original text")
-                    cleaned_chunks.append(chunk)
-                else:
+                last_error = str(e)
+                if attempt < max_retries - 1:
+                    if reporter:
+                        reporter.on_retry(i, attempt + 1, max_retries, retry_delay, last_error)
                     time.sleep(retry_delay)
+                else:
+                    logger.warning(f"Failed to process chunk {i}, using original text: {last_error}")
+                    if reporter:
+                        reporter.on_error_giveup(i, last_error or "unknown error")
+                    cleaned_chunks.append(chunk)
+
+        # Heartbeat while waiting was handled around the call; for very long waits, we log periodic messages
+        # Note: since the call is synchronous, we emulate heartbeats by printing periodic 'Still waiting' logs
+        # in on_llm_wait_heartbeat from the call site above (not feasible without threads). Kept simple.
+
+    elapsed = int(time.time() - start_ts)
+    if reporter:
+        reporter.on_summary(total, total_retries, total_tokens_in or None, total_tokens_out or None, elapsed)
     return cleaned_chunks
 
 
@@ -224,11 +417,13 @@ class EPUBOCRCleaner:
         azure_openai_cfg: Optional[AzureOpenAIConfig] = kwargs.pop("azure_openai_cfg", None)
         client_factory: Optional[Callable[[AzureOpenAIConfig], openai.AzureOpenAI]] = kwargs.pop("client_factory", None)
         runtime_cfg: Optional[CleanerRuntimeConfig] = kwargs.pop("runtime_cfg", None)
+        status_file: Optional[Path] = kwargs.pop("status_file", None)
 
         # Ignore any unexpected kwargs for backward compatibility
 
         self.debug_mode = debug_mode
         self.debug_dir = debug_dir
+        self.status_file = status_file
 
         # Prefer injected typed config. Fall back to env for backward-compat if not provided.
         if azure_openai_cfg is None:
@@ -260,6 +455,15 @@ class EPUBOCRCleaner:
                 azure_endpoint=self.azure_cfg.endpoint,
             )
 
+        # Initialize reporters
+        self.console_reporter = ConsoleProgressReporter(logger)
+        self.json_reporter: Optional[JsonFileProgressReporter] = None
+        if self.status_file:
+            try:
+                self.json_reporter = JsonFileProgressReporter(Path(self.status_file))
+            except Exception:
+                self.json_reporter = None
+
     # ----- Instance wrappers around pure helpers -----
 
     def analyze_ocr_artifacts(self, text: str) -> Dict[str, int]:
@@ -273,6 +477,26 @@ class EPUBOCRCleaner:
     def clean_text_with_llm(self, text: str) -> str:
         """Clean text using Azure GPT-4.1 (uses pure helpers)."""
         chunks = self.chunk_text(text)
+        # Combine reporters
+        reporter: Optional[ProgressReporter] = self.console_reporter
+        if self.json_reporter:
+            # simple composite behavior: call both by wrapping
+            class CompositeReporter(ProgressReporter):
+                def __init__(self, a: ProgressReporter, b: ProgressReporter) -> None:
+                    self.a = a; self.b = b
+                def on_stage(self, s, e=None): self.a.on_stage(s, e); self.b.on_stage(s, e)
+                def on_chunking_done(self, t): self.a.on_chunking_done(t); self.b.on_chunking_done(t)
+                def on_chunk_start(self, i, t): self.a.on_chunk_start(i, t); self.b.on_chunk_start(i, t)
+                def on_llm_submit(self, i, t): self.a.on_llm_submit(i, t); self.b.on_llm_submit(i, t)
+                def on_llm_wait_start(self, i, t): self.a.on_llm_wait_start(i, t); self.b.on_llm_wait_start(i, t)
+                def on_llm_wait_heartbeat(self, i, t, e): self.a.on_llm_wait_heartbeat(i, t, e); self.b.on_llm_wait_heartbeat(i, t, e)
+                def on_llm_wait_end(self, i, t, l): self.a.on_llm_wait_end(i, t, l); self.b.on_llm_wait_end(i, t, l)
+                def on_chunk_result(self, i, t, ti, to, l): self.a.on_chunk_result(i, t, ti, to, l); self.b.on_chunk_result(i, t, ti, to, l)
+                def on_retry(self, i, a, m, b, e): self.a.on_retry(i, a, m, b, e); self.b.on_retry(i, a, m, b, e)
+                def on_error_giveup(self, i, e): self.a.on_error_giveup(i, e); self.b.on_error_giveup(i, e)
+                def on_summary(self, t, r, ti, to, e): self.a.on_summary(t, r, ti, to, e); self.b.on_summary(t, r, ti, to, e)
+            reporter = CompositeReporter(self.console_reporter, self.json_reporter)
+
         cleaned_chunks = clean_chunks(
             chunks=chunks,
             client=self.client,
@@ -281,6 +505,7 @@ class EPUBOCRCleaner:
             max_tokens_response=self.runtime_cfg.max_tokens_response,
             debug_mode=self.debug_mode,
             debug_dir=self.debug_dir,
+            reporter=reporter,
         )
         return "\n\n".join(cleaned_chunks)
 

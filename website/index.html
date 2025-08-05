@@ -81,8 +81,8 @@
         <div class="grid grid-3">
           <div class="card">
             <h3>PDF → EPUB</h3>
-            <p class="i18n" data-i18n="what_item1_en" lang="en">Accepts publicly accessible PDF URLs and produces structured EPUBs.</p>
-            <p class="i18n" data-i18n="what_item1_hu" lang="hu">Nyilvánosan elérhető PDF URL-t fogad és strukturált EPUB-ot készít.</p>
+            <p class="i18n" data-i18n="what_item1_en" lang="en">Accepts local PDF paths and public URLs. Local files are uploaded to Azure Blob to generate a temporary SAS URL automatically.</p>
+            <p class="i18n" data-i18n="what_item1_hu" lang="hu">Helyi PDF fájlokat és nyilvános URL‑eket is elfogad. A helyi fájlokat az eszköz automatikusan Azure Blob‑ba tölti fel ideiglenes SAS URL létrehozásához.</p>
           </div>
           <div class="card">
             <h3>OCR + Cleanup</h3>
@@ -144,14 +144,23 @@
               <li class="i18n" data-i18n="qs_r1_hu" lang="hu">Python környezet</li>
               <li class="i18n" data-i18n="qs_r2_en" lang="en">Azure keys (Content Understanding + OpenAI)</li>
               <li class="i18n" data-i18n="qs_r2_hu" lang="hu">Azure kulcsok (Content Understanding + OpenAI)</li>
-              <li class="i18n" data-i18n="qs_r3_en" lang="en">Publicly accessible PDF URL</li>
-              <li class="i18n" data-i18n="qs_r3_hu" lang="hu">Nyilvánosan elérhető PDF URL</li>
+              <li class="i18n" data-i18n="qs_r3_en" lang="en">Local PDF path or publicly accessible URL</li>
+              <li class="i18n" data-i18n="qs_r3_hu" lang="hu">Helyi PDF fájl vagy nyilvánosan elérhető URL</li>
             </ul>
           </div>
           <div>
             <h3 class="i18n" data-i18n="qs_example_en" lang="en">Example</h3>
             <h3 class="i18n" data-i18n="qs_example_hu" lang="hu">Példa</h3>
-            <pre class="code"><code id="cmd">scan2epub --pdf-url "https://example.com/book.pdf" --mode full</code></pre>
+            <pre class="code"><code id="cmd"># Convert (default) — local file or URL
+scan2epub "C:\path\to\book.pdf" "C:\path\to\output.epub" --language hu
+# or explicit:
+scan2epub convert "C:\path\to\book.pdf" "C:\path\to\output.epub"
+
+# OCR only → raw EPUB
+scan2epub ocr "C:\path\to\book.pdf" "C:\path\to\raw.epub" --language hu
+
+# Cleanup only → cleaned EPUB
+scan2epub clean "C:\path\to\raw.epub" "C:\path\to\final.epub" --save-interim</code></pre>
             <div class="btn-row">
               <button class="btn btn-secondary" id="copyBtn">
                 <span class="i18n" data-i18n="copy_en" lang="en">Copy command</span>
@@ -165,8 +174,8 @@
           </div>
         </div>
         <p class="note">
-          <span class="i18n" data-i18n="qs_note_en" lang="en">Note: Current version depends on Azure services and public PDF URLs. Processing time is typically 10–30 minutes.</span>
-          <span class="i18n" data-i18n="qs_note_hu" lang="hu">Megjegyzés: A jelenlegi verzió Azure szolgáltatásokat és nyilvános PDF URL-t igényel. A feldolgozás jellemzően 10–30 perc.</span>
+          <span class="i18n" data-i18n="qs_note_en" lang="en">Note: Current version depends on Azure services. Local PDFs are supported via automatic Azure Blob upload (temporary SAS URL). The default command (no subcommand) runs a full convert. Processing time is typically 10–30 minutes.</span>
+          <span class="i18n" data-i18n="qs_note_hu" lang="hu">Megjegyzés: A jelenlegi verzió Azure szolgáltatásokat használ. A helyi PDF‑ek automatikus Azure Blob feltöltéssel (ideiglenes SAS URL) támogatottak. Alapértelmezésben (alkaparancs nélkül) a teljes konvertálás fut. A feldolgozás jellemzően 10–30 perc.</span>
         </p>
       </div>
     </section>
@@ -256,8 +265,8 @@
           <summary class="i18n" data-i18n="faq1_q_en" lang="en">Why do I need a public PDF URL?</summary>
           <summary class="i18n" data-i18n="faq1_q_hu" lang="hu">Miért kell nyilvános PDF URL?</summary>
           <div class="details-body">
-            <p class="i18n" data-i18n="faq1_a_en" lang="en">Current version processes PDFs via URL to manage memory and pipeline constraints. Local files are not supported yet.</p>
-            <p class="i18n" data-i18n="faq1_a_hu" lang="hu">A jelenlegi verzió URL‑en keresztül dolgozza fel a PDF‑eket a memória és a folyamat korlátai miatt. Helyi fájlok támogatása még nincs.</p>
+            <p class="i18n" data-i18n="faq1_a_en" lang="en">Azure Content Understanding requires a URL for OCR. Local files are supported: the tool uploads your PDF to Azure Blob and uses a temporary SAS URL automatically.</p>
+            <p class="i18n" data-i18n="faq1_a_hu" lang="hu">Az Azure Content Understanding az OCR‑hez URL‑t igényel. A helyi fájlok támogatottak: az eszköz feltölti a PDF‑et Azure Blob‑ba, és automatikusan ideiglenes SAS URL‑t használ.</p>
           </div>
         </details>
         <details>

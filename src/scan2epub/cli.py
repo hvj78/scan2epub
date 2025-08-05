@@ -33,7 +33,7 @@ def main() -> int:
         prog="scan2epub",
         description="Convert scanned PDFs to clean EPUBs or clean existing EPUBs using Azure AI."
     )
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    subparsers = parser.add_subparsers(dest="command")
 
     # ocr subcommand
     ocr_p = subparsers.add_parser("ocr", help="Run OCR on a PDF (local path or URL) and create an EPUB.")
@@ -48,22 +48,46 @@ def main() -> int:
     clean_p.add_argument("input_epub", help="Input EPUB file path")
     clean_p.add_argument("output_epub", help="Output EPUB file path (.epub)")
     clean_p.add_argument("--save-interim", action="store_true", help="Save interim results to disk (reduces memory)")
+    clean_p.add_argument("--status-file", type=str, default=None, help="Write incremental JSONL status to this file")
     clean_p.add_argument("--config", type=str, default=None, help="Path to configuration file (default: scan2epub.ini)")
     clean_p.add_argument("--debug", action="store_true", help="Enable debug output")
 
-    # pipeline subcommand
-    pipe_p = subparsers.add_parser("pipeline", help="Full pipeline: PDF -> OCR -> cleanup -> EPUB.")
+    # convert subcommand (new, preferred)
+    conv_p = subparsers.add_parser("convert", help="Convert a PDF (local path or URL) to a cleaned EPUB (full pipeline).")
+    conv_p.add_argument("input_pdf", help="Input PDF file path or publicly accessible URL")
+    conv_p.add_argument("output_epub", help="Final output EPUB file path (.epub)")
+    conv_p.add_argument("--language", type=str, default="hu", help="OCR language (default: hu)")
+    conv_p.add_argument("--save-interim", action="store_true", help="Save interim results to disk (reduces memory)")
+    conv_p.add_argument("--status-file", type=str, default=None, help="Write incremental JSONL status to this file during cleanup")
+    conv_p.add_argument("--config", type=str, default=None, help="Path to configuration file (default: scan2epub.ini)")
+    conv_p.add_argument("--debug", action="store_true", help="Enable debug output")
+
+    # pipeline subcommand (deprecated alias; kept for backward compatibility)
+    pipe_p = subparsers.add_parser("pipeline", help="(Deprecated) Full pipeline: PDF -> OCR -> cleanup -> EPUB.")
     pipe_p.add_argument("input_pdf", help="Input PDF file path or publicly accessible URL")
     pipe_p.add_argument("output_epub", help="Final output EPUB file path (.epub)")
     pipe_p.add_argument("--language", type=str, default="hu", help="OCR language (default: hu)")
     pipe_p.add_argument("--save-interim", action="store_true", help="Save interim results to disk (reduces memory)")
+    pipe_p.add_argument("--status-file", type=str, default=None, help="Write incremental JSONL status to this file during cleanup")
     pipe_p.add_argument("--config", type=str, default=None, help="Path to configuration file (default: scan2epub.ini)")
     pipe_p.add_argument("--debug", action="store_true", help="Enable debug output")
 
     # azure-test subcommand
     az_p = subparsers.add_parser("azure-test", help="Run Azure configuration tests and exit.")
 
-    args = parser.parse_args()
+    # Parse known args first to allow default subcommand behavior
+    import sys
+    # If no subcommand provided (first non-flag arg looks like input), default to 'convert'
+    argv = sys.argv[1:]
+    known_subs = {"ocr", "clean", "pipeline", "convert", "azure-test"}
+    if not argv or (argv[0].startswith("-")):
+        # no args or only flags -> show help
+        args = parser.parse_args()
+    elif argv[0] not in known_subs:
+        # Prepend 'convert' as default subcommand
+        args = parser.parse_args(["convert"] + argv)
+    else:
+        args = parser.parse_args()
 
     # Load typed application config (CLI is the only place that reads env via load_dotenv above)
     app_cfg = AppConfig.from_env_and_ini(args.config if hasattr(args, "config") else None)
@@ -83,11 +107,7 @@ def main() -> int:
 
         # Common validations
         output_file = None
-        if args.command == "ocr":
-            output_file = args.output_epub
-        elif args.command == "clean":
-            output_file = args.output_epub
-        elif args.command == "pipeline":
+        if args.command in ("ocr", "clean", "pipeline", "convert"):
             output_file = args.output_epub
 
         if output_file and Path(output_file).suffix.lower() != ".epub":
@@ -114,6 +134,8 @@ def main() -> int:
 
         elif args.command == "clean":
             input_epub = args.input_epub
+            # Normalize status file to absolute path so it is not lost due to CWD changes
+            status_path = Path(args.status_file).resolve() if getattr(args, "status_file", None) else None
             run_cleanup(
                 cfg=app_cfg,
                 input_epub=input_epub,
@@ -121,13 +143,18 @@ def main() -> int:
                 debug=debug_enabled,
                 save_interim=args.save_interim or app_cfg.processing.save_interim,
                 debug_dir=debug_dir,
+                status_file=status_path,
             )
             logger.info(f"EPUB cleanup completed: {args.input_epub} -> {args.output_epub}")
             return 0
 
-        elif args.command == "pipeline":
+        elif args.command in ("pipeline", "convert"):
+            if args.command == "pipeline":
+                logger.warning("The 'pipeline' subcommand is deprecated. Use 'convert' instead.")
             input_pdf = args.input_pdf
             language = args.language
+            # Normalize status file to absolute path
+            status_path = Path(args.status_file).resolve() if getattr(args, "status_file", None) else None
             run_full_pipeline(
                 cfg=app_cfg,
                 input_pdf=input_pdf,
@@ -136,8 +163,9 @@ def main() -> int:
                 debug=debug_enabled,
                 save_interim=args.save_interim or app_cfg.processing.save_interim,
                 debug_dir=debug_dir,
+                status_file=status_path,
             )
-            logger.info(f"Full pipeline completed: {args.input_pdf} -> {args.output_epub}")
+            logger.info(f"Full conversion completed: {args.input_pdf} -> {args.output_epub}")
             return 0
 
         else:
