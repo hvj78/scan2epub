@@ -540,7 +540,7 @@ class EPUBOCRCleaner:
             content_items = []
             for item in book.get_items():
                 if item.get_type() == 9:  # EBOOKLIB_ITEM_DOCUMENT
-                    soup = BeautifulSoup(item.get_content(), 'lxml')
+                    soup = BeautifulSoup(item.get_content(), 'lxml-xml')
                     text_content = soup.get_text()
 
                     content_items.append({
