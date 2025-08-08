@@ -64,7 +64,8 @@ class PDFOCRProcessor:
                 elif status == "Failed":
                     raise Exception(f"Content Understanding analysis failed: {result.get('error', 'Unknown error')}")
                 elif status in ["Running", "NotStarted"]:
-                    print(f"Analysis status: {status}. Retrying in {retry_delay} seconds (attempt {attempt + 1}/{max_retries})...")
+                    elapsed_s = (attempt + 1) * retry_delay
+                    print(f"Analysis status: {status}. Retrying in {retry_delay} seconds (attempt {attempt + 1}/{max_retries}, elapsed {elapsed_s}s)...")
                     time.sleep(retry_delay)
                 else:
                     raise Exception(f"Unexpected analysis status: {status}")

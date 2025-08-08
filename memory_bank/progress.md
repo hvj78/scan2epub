@@ -35,6 +35,20 @@
 
 ## What's Left to Build
 
+### Pending from Current Implementation Plan
+From the previous Summary Implementation Order, the following items remain to be implemented:
+
+3. **Add OCR-phase progress events**  
+   - Show attempt counts and averages during CU polling.
+   - Intended to give users more granular feedback in the OCR stage.
+
+5. **Enhance status.jsonl to include all new events and metrics**  
+   - Ensure CU poll heartbeats, OCR-phase progress, and cleanup %/ETA are written to JSONL status log.
+   - Include metrics like elapsed time, ETA, and per-stage summaries.
+
+6. **Add interim preservation control to CLI/INI**  
+   - Provide a `--preserve-interim` flag and INI option to keep interim OCR EPUB file even when not using `--save-interim`.
+
 ### High Priority
 1. **Local AI Support**:
    - [ ] Tesseract OCR integration

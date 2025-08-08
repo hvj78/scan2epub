@@ -61,47 +61,52 @@ class ConsoleProgressReporter(ProgressReporter):
         return time.strftime("%H:%M:%S")
 
     def on_stage(self, stage: str, extras: Optional[Dict[str, Any]] = None) -> None:
-        msg = f"[CLEANUP][{self._ts()}] {stage}"
+        msg = f"{stage}"
         if extras:
             msg += " " + json.dumps(extras, ensure_ascii=False)
         self.logger.info(msg)
 
     def on_chunking_done(self, total_chunks: int) -> None:
         self._total_chunks = total_chunks
-        self.logger.info(f"[CLEANUP][{self._ts()}] Chunking complete: {total_chunks} chunks")
+        self.logger.info(f"Chunking complete: {total_chunks} chunks")
 
     def on_chunk_start(self, idx: int, total: int) -> None:
-        self.logger.info(f"[CLEANUP][{self._ts()}] [Chunk {idx}/{total}] Start")
+        percent = (idx - 1) / total * 100
+        self.logger.info(f"[Chunk {idx}/{total} - {percent:.0f}%] Start")
 
     def on_llm_submit(self, idx: int, total: int) -> None:
-        self.logger.info(f"[CLEANUP][{self._ts()}] [Chunk {idx}/{total}] Submitting to LLM…")
+        percent = (idx - 1) / total * 100
+        self.logger.info(f"[Chunk {idx}/{total} - {percent:.0f}%] Submitting to LLM…")
 
     def on_llm_wait_start(self, idx: int, total: int) -> None:
         self._last_heartbeat = 0.0
-        self.logger.info(f"[CLEANUP][{self._ts()}] [Chunk {idx}/{total}] Waiting for LLM response…")
+        percent = (idx - 1) / total * 100
+        self.logger.info(f"[Chunk {idx}/{total} - {percent:.0f}%] Waiting for LLM response…")
 
     def on_llm_wait_heartbeat(self, idx: int, total: int, elapsed_s: int) -> None:
         now = time.time()
         if self._last_heartbeat == 0.0 or (now - self._last_heartbeat) >= self.heartbeat_interval_s:
             self._last_heartbeat = now
-            self.logger.info(f"[CLEANUP][{self._ts()}] [Chunk {idx}/{total}] Still waiting… {elapsed_s}s elapsed")
+            self.logger.info(f"[Chunk {idx}/{total}] Still waiting… {elapsed_s}s elapsed")
 
     def on_llm_wait_end(self, idx: int, total: int, latency_s: float) -> None:
-        self.logger.info(f"[CLEANUP][{self._ts()}] [Chunk {idx}/{total}] Response received in {latency_s:.1f}s")
+        percent = idx / total * 100
+        self.logger.info(f"[Chunk {idx}/{total} - {percent:.0f}%] Response received in {latency_s:.1f}s")
 
     def on_chunk_result(self, idx: int, total: int, tokens_in: Optional[int], tokens_out: Optional[int], latency_s: float) -> None:
         tok_info = f"(tokens in {tokens_in}, out {tokens_out})" if (tokens_in is not None or tokens_out is not None) else ""
-        self.logger.info(f"[CLEANUP][{self._ts()}] [Chunk {idx}/{total}] Cleaned {tok_info} in {latency_s:.1f}s")
+        percent = idx / total * 100
+        self.logger.info(f"[Chunk {idx}/{total} - {percent:.0f}%] Cleaned {tok_info} in {latency_s:.1f}s")
 
     def on_retry(self, idx: int, attempt: int, max_attempts: int, backoff_s: int, error: str) -> None:
-        self.logger.warning(f"[CLEANUP][{self._ts()}] [Chunk {idx}] LLM call failed: {error}. Retry {attempt}/{max_attempts} in {backoff_s}s")
+        self.logger.warning(f"[Chunk {idx}] LLM call failed: {error}. Retry {attempt}/{max_attempts} in {backoff_s}s")
 
     def on_error_giveup(self, idx: int, error: str) -> None:
-        self.logger.warning(f"[CLEANUP][{self._ts()}] [Chunk {idx}] Failed after retries, using original text. Error: {error}")
+        self.logger.warning(f"[Chunk {idx}] Failed after retries, using original text. Error: {error}")
 
     def on_summary(self, total: int, retries: int, tokens_in: Optional[int], tokens_out: Optional[int], elapsed_s: int) -> None:
         tok_info = f"tokens in ~{tokens_in or 0}, out ~{tokens_out or 0}"
-        self.logger.info(f"[CLEANUP][{self._ts()}] Cleanup summary: {total} chunks, retries {retries}, {tok_info}, elapsed {elapsed_s//60:02d}:{elapsed_s%60:02d}")
+        self.logger.info(f"Cleanup summary: {total} chunks, retries {retries}, {tok_info}, elapsed {elapsed_s//60:02d}:{elapsed_s%60:02d}")
 
 
 class JsonFileProgressReporter(ProgressReporter):
