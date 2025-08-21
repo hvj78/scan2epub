@@ -55,8 +55,6 @@ AZURE_OPENAI_API_KEY=your_key_here
 AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
 AZURE_OPENAI_API_VERSION=2024-02-15-preview
 AZURE_OPENAI_DEPLOYMENT_NAME=your-gpt4-deployment
-# Back-compat variable also supported by code:
-# AZURE_OPENAI_DEPLOYMENT (preferred in typed config)
 
 # Processing Configuration (runtime defaults live in code; env is optional)
 MAX_TOKENS_PER_CHUNK=3000

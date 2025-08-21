@@ -46,6 +46,22 @@ class AzureStorageConfig:
 
 
 @dataclass(frozen=True)
+class TranslatorConfig:
+    """
+    Translation configuration (provider + Azure Translator settings).
+    """
+    provider: str
+    default_target_language: str
+    azure_endpoint: Optional[str] = None
+    azure_region: Optional[str] = None
+    azure_api_key: Optional[str] = None
+    api_version: str = "3.0"
+    # Quality guardrails
+    allow_noop: bool = False
+    min_changed_ratio: float = 0.0
+
+
+@dataclass(frozen=True)
 class ProcessingConfig:
     """
     Application processing preferences and toggles coming from INI defaults and CLI flags.
@@ -53,6 +69,14 @@ class ProcessingConfig:
     debug: bool
     save_interim: bool
     cleanup_on_failure: bool
+
+
+@dataclass(frozen=True)
+class DiagnosticsConfig:
+    """
+    Diagnostics and preflight behavior settings.
+    """
+    skip_preflight: bool = False
 
 
 @dataclass(frozen=True)
@@ -64,7 +88,9 @@ class AppConfig:
     azure_cu: AzureCUConfig
     azure_openai: AzureOpenAIConfig
     azure_storage: AzureStorageConfig
+    translator: TranslatorConfig
     processing: ProcessingConfig
+    diagnostics: DiagnosticsConfig
 
     @staticmethod
     def _get_env_str(name: str, default: Optional[str] = None) -> Optional[str]:
@@ -109,7 +135,7 @@ class AppConfig:
             endpoint=cls._get_env_str("AZURE_OPENAI_ENDPOINT"),
             api_key=cls._get_env_str("AZURE_OPENAI_API_KEY"),
             api_version=cls._get_env_str("AZURE_OPENAI_API_VERSION"),
-            deployment=cls._get_env_str("AZURE_OPENAI_DEPLOYMENT"),
+            deployment=cls._get_env_str("AZURE_OPENAI_DEPLOYMENT_NAME"),
         )
 
         # Azure Storage
@@ -124,6 +150,18 @@ class AppConfig:
             debug=cfg.debug,
         )
 
+        # Translator (provider + Azure Translator settings; env can override endpoint/region/key)
+        translator = TranslatorConfig(
+            provider=cfg.translator_provider,
+            default_target_language=cfg.default_target_language,
+            azure_endpoint=cls._get_env_str("AZURE_TRANSLATOR_ENDPOINT") or cfg.azure_translator_endpoint,
+            azure_region=cls._get_env_str("AZURE_TRANSLATOR_REGION") or cfg.azure_translator_region,
+            azure_api_key=cls._get_env_str("AZURE_TRANSLATOR_KEY"),
+            api_version=cfg.azure_translator_api_version,
+            allow_noop=cfg.translator_allow_noop,
+            min_changed_ratio=cfg.translator_min_changed_ratio,
+        )
+
         # Processing toggles (CLI may override these when building debug/save_interim)
         processing = ProcessingConfig(
             debug=cfg.debug,
@@ -131,9 +169,15 @@ class AppConfig:
             cleanup_on_failure=getattr(cfg, "cleanup_on_failure", True),
         )
 
+        diagnostics = DiagnosticsConfig(
+            skip_preflight=cfg.skip_preflight,
+        )
+
         return cls(
             azure_cu=cu,
             azure_openai=aoi,
             azure_storage=storage,
+            translator=translator,
             processing=processing,
+            diagnostics=diagnostics,
         )

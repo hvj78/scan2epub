@@ -186,6 +186,38 @@ The output EPUB will have:
 - Cleanup prompt is optimized for Hungarian
 - May need prompt customization for other languages
 
+## Translation (Optional Stage)
+
+You can optionally translate a cleaned EPUB into a target language as a third stage after Cleanup.
+
+Prerequisites
+- Ensure Azure Translator credentials are configured in .env (see .env.template):
+  - AZURE_TRANSLATOR_KEY
+  - AZURE_TRANSLATOR_REGION (optional, if required by your subscription)
+  - AZURE_TRANSLATOR_ENDPOINT (optional; defaults to https://api.cognitive.microsofttranslator.com/)
+- Review scan2epub.ini [Translator] section for defaults:
+  - provider, azure_endpoint, azure_region, api_version, default_target_language
+
+Usage
+- Translate an existing EPUB:
+  ```bash
+  scan2epub translate input.hu.epub output.en.epub --to en
+  ```
+- Full pipeline including translation:
+  ```bash
+  scan2epub convert input.pdf output.en.epub --translate-to en
+  ```
+- Clean and translate in one step:
+  ```bash
+  scan2epub clean input.epub output.epub --translate-to de
+  ```
+
+Notes
+- Translation runs after cleanup for best translation quality.
+- EPUB metadata is updated (language set to target, and title suffixed like " (Translated to {lang})").
+- Use --status-file to capture progress JSONL events (translate_start, translate_item_start, translate_batch_start, translate_batch_done, translate_done).
+- If a translation batch fails after retries, the original text for that batch is kept so the pipeline can complete.
+
 ## Troubleshooting Tips
 
 ### If OCR fails:

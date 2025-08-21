@@ -8,6 +8,8 @@ from scan2epub.epub.builder import EPUBBuilder
 from scan2epub.azure.storage import AzureStorageHandler
 from scan2epub.utils.errors import OCRError, EPUBError
 from scan2epub.config import AppConfig  # typed config
+from scan2epub.translate.translator import AzureTranslator
+from scan2epub.epub.translator import EPUBTranslator
 
 
 def run_ocr_to_epub(
@@ -111,6 +113,58 @@ def run_cleanup(
     return output_epub
 
 
+def run_translate(
+    cfg: AppConfig,
+    input_epub: str,
+    output_epub: str,
+    to_lang: str,
+    provider: Optional[str] = None,
+    debug: bool = False,
+    debug_dir: Optional[Path] = None,
+    status_file: Optional[Path] = None,
+    allow_noop: Optional[bool] = None,
+    min_changed_ratio: Optional[float] = None,
+) -> str:
+    """
+    Translate an EPUB using the configured translator and write the translated EPUB.
+    Returns output_epub_path.
+    """
+    # Determine provider (for now only Azure Translator is implemented)
+    provider_name = (provider or "").lower() or cfg.translator.provider
+    if provider_name in ("azure_translator", "azure", "auto"):
+        if not cfg.translator.azure_api_key:
+            raise EPUBError("Azure Translator selected but AZURE_TRANSLATOR_KEY is not set. Configure .env/INI.")
+        translator = AzureTranslator(
+            endpoint=cfg.translator.azure_endpoint or "https://api.cognitive.microsofttranslator.com",
+            api_key=cfg.translator.azure_api_key,
+            region=cfg.translator.azure_region,
+            api_version=cfg.translator.api_version,
+        )
+        # Defensive preflight right before translation to hard-stop on provider issues
+        try:
+            translator.preflight_check(to_lang=to_lang)
+        except Exception as e:
+            raise EPUBError(f"Translator preflight failed: {e}") from e
+    else:
+        raise EPUBError(f"Unsupported translation provider '{provider_name}'. Supported: azure_translator")
+
+    engine = EPUBTranslator(
+        translator=translator,
+        debug_mode=debug,
+        debug_dir=debug_dir,
+        status_file=status_file,
+        allow_noop=(allow_noop if allow_noop is not None else cfg.translator.allow_noop),
+        min_changed_ratio=(min_changed_ratio if min_changed_ratio is not None else cfg.translator.min_changed_ratio),
+    )
+    return engine.translate_epub(
+        input_epub=input_epub,
+        output_epub=output_epub,
+        to_lang=to_lang,
+        from_lang=None,
+        debug=debug,
+    )
+
+
 def run_full_pipeline(
     cfg: AppConfig,
     input_pdf: str,
@@ -120,6 +174,10 @@ def run_full_pipeline(
     save_interim: bool = False,
     debug_dir: Optional[Path] = None,
     status_file: Optional[Path] = None,
+    translate_to: Optional[str] = None,
+    translate_provider: Optional[str] = None,
+    allow_noop_translation: Optional[bool] = None,
+    min_changed_ratio: Optional[float] = None,
 ) -> str:
     """
     Full pipeline: PDF -> OCR -> interim EPUB -> cleanup -> final EPUB.
@@ -157,16 +215,43 @@ def run_full_pipeline(
 
     # Step 2: Cleanup interim EPUB to final
     _status("cleanup_start")
+    # Decide cleanup output target: direct to final unless translation is requested
+    interim_clean_epub_path = output_path_obj.with_stem(output_path_obj.stem + "_interim_clean").with_suffix(".epub")
+    cleanup_target = output_epub if not translate_to else str(interim_clean_epub_path)
     final_path = run_cleanup(
         cfg=cfg,
         input_epub=str(interim_epub_path),
-        output_epub=output_epub,
+        output_epub=cleanup_target,
         debug=debug,
         save_interim=save_interim,
         debug_dir=debug_dir,
         status_file=status_file,
     )
-    _status("cleanup_done", final=output_epub)
+    _status("cleanup_done", final=cleanup_target)
+
+    # Optional Step 3: Translate cleaned EPUB to target language
+    if translate_to:
+        _status("translate_start", to=translate_to)
+        final_path = run_translate(
+            cfg=cfg,
+            input_epub=cleanup_target,
+            output_epub=output_epub,
+            to_lang=translate_to,
+            provider=translate_provider,
+            debug=debug,
+            debug_dir=debug_dir,
+            status_file=status_file,
+            allow_noop=allow_noop_translation,
+            min_changed_ratio=min_changed_ratio,
+        )
+        _status("translate_done", final=output_epub)
+        # Cleanup interim cleaned file if not debugging
+        if not (debug and debug_dir):
+            try:
+                Path(cleanup_target).unlink(missing_ok=True)
+                logging.getLogger("scan2epub.pipeline").info(f"Cleaned up interim file: {cleanup_target}")
+            except Exception:
+                pass
 
     # Move or remove interim
     if debug and debug_dir:

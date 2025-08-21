@@ -26,6 +26,22 @@ class ConfigManager:
         'Cleanup': {
             'cleanup_on_failure': 'true',
             'log_cleanup': 'true'
+        },
+        'Translator': {
+            # Default translation settings
+            'provider': 'azure_translator',  # options: azure_translator | aoai | local
+            'default_target_language': 'hu',
+            # Azure Translator defaults
+            'azure_endpoint': 'https://api.cognitive.microsofttranslator.com/',
+            'azure_region': '',
+            'api_version': '3.0',
+            # Translation quality guards
+            'allow_noop': 'false',
+            'min_changed_ratio': '0.0'
+        },
+        'Diagnostics': {
+            # Application-level preflight checks before running commands
+            'skip_preflight': 'false'
         }
     }
     
@@ -100,6 +116,32 @@ cleanup_on_failure = true
 # Log cleanup operations to track what was deleted
 # Useful for debugging and auditing
 log_cleanup = true
+
+[Translator]
+# Translation provider to use: azure_translator | aoai | local
+provider = azure_translator
+
+# Default target language (ISO code) when not specified on the CLI
+default_target_language = hu
+
+# Azure Translator configuration
+# Endpoint for the Microsoft Translator Text API
+azure_endpoint = https://api.cognitive.microsofttranslator.com/
+# Region is required for some Azure subscriptions (e.g., global multi-service keys)
+azure_region = 
+# API version for Translator Text
+api_version = 3.0
+
+# Translation quality guardrails
+# When false (default), a translation that results in 0 changed paragraphs will abort.
+allow_noop = false
+# Minimum fraction of paragraphs that must change for translation to be considered successful (0.0-1.0)
+min_changed_ratio = 0.0
+
+[Diagnostics]
+# Run a lightweight Azure preflight (storage/CU/OpenAI/translator) before starting work
+# Set to true to skip the preflight without passing the CLI flag
+skip_preflight = false
 """
         
         template_path = self.config_path.with_suffix('.ini.template')
@@ -163,3 +205,48 @@ log_cleanup = true
     def log_cleanup(self) -> bool:
         """Check if cleanup operations should be logged"""
         return self.getboolean('Cleanup', 'log_cleanup', True)
+
+    # ------- Translator properties -------
+
+    @property
+    def translator_provider(self) -> str:
+        """Get translation provider (azure_translator | aoai | local)"""
+        return self.get('Translator', 'provider', 'azure_translator')
+
+    @property
+    def default_target_language(self) -> str:
+        """Get default target language for translation (ISO code)"""
+        return self.get('Translator', 'default_target_language', 'hu')
+
+    @property
+    def azure_translator_endpoint(self) -> str:
+        """Get Azure Translator endpoint"""
+        return self.get('Translator', 'azure_endpoint', 'https://api.cognitive.microsofttranslator.com/')
+
+    @property
+    def azure_translator_region(self) -> Optional[str]:
+        """Get Azure Translator region (optional)"""
+        val = self.get('Translator', 'azure_region', '')
+        return val if val else None
+
+    @property
+    def azure_translator_api_version(self) -> str:
+        """Get Azure Translator API version"""
+        return self.get('Translator', 'api_version', '3.0')
+
+    @property
+    def translator_allow_noop(self) -> bool:
+        """Whether to allow no-op translation outputs without failing"""
+        return self.getboolean('Translator', 'allow_noop', False)
+
+    @property
+    def translator_min_changed_ratio(self) -> float:
+        """Minimum fraction of paragraphs that must change to consider translation successful"""
+        return self.getfloat('Translator', 'min_changed_ratio', 0.0)
+
+    # ------- Diagnostics / Preflight properties -------
+
+    @property
+    def skip_preflight(self) -> bool:
+        """Skip application-level Azure preflight checks"""
+        return self.getboolean('Diagnostics', 'skip_preflight', False)

@@ -20,3 +20,7 @@ class LLMError(Scan2EpubError):
 
 class EPUBError(Scan2EpubError):
     """EPUB building/processing related errors."""
+
+
+class TranslationError(Scan2EpubError):
+    """Translation related errors."""

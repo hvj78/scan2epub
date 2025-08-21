@@ -435,7 +435,7 @@ class EPUBOCRCleaner:
             endpoint = os.getenv("AZURE_OPENAI_ENDPOINT")
             api_key = os.getenv("AZURE_OPENAI_API_KEY")
             api_version = os.getenv("AZURE_OPENAI_API_VERSION")
-            deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT") or os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
+            deployment = os.getenv("AZURE_OPENAI_DEPLOYMENT_NAME")
             if not all([endpoint, api_key, api_version, deployment]):
                 raise LLMError("Missing Azure OpenAI configuration. Provide AzureOpenAIConfig or set environment variables.")
             self.azure_cfg = AzureOpenAIConfig(

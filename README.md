@@ -166,6 +166,75 @@ python scan2epub.py messy_ocr.epub clean_book.epub --cleanup-only
 python scan2epub.py --config my_settings.ini --debug book.pdf output.epub
 ```
 
+## Translation (Optional Stage)
+
+You can optionally translate the cleaned EPUB to a target language using Azure Translator.
+
+Prerequisites:
+- Provide keys in .env (see .env.template):
+  - AZURE_TRANSLATOR_KEY, AZURE_TRANSLATOR_REGION (optional), AZURE_TRANSLATOR_ENDPOINT (optional)
+- Check scan2epub.ini [Translator] section for defaults (provider, endpoint, default target language)
+
+Examples (new CLI subcommands):
+- Translate an existing EPUB to English:
+  ```bash
+  scan2epub translate input.hu.epub output.en.epub --to en
+  ```
+- Full pipeline with translation (PDF → OCR → Clean → Translate):
+  ```bash
+  scan2epub convert input.pdf output.en.epub --translate-to en
+  ```
+- Clean an EPUB and translate in one step:
+  ```bash
+  scan2epub clean input.epub output.epub --translate-to de
+  ```
+
+Notes:
+- Translation runs after cleanup for best quality.
+- Title and language metadata are updated in the translated EPUB.
+- Progress/status events can be written with --status-file similar to cleanup.
+
+## Azure Preflight Checks
+
+Before starting an operation, the CLI can perform lightweight health checks against the required Azure services to fail fast if something is misconfigured or unavailable. This prevents partially completed runs and misleading “success” messages.
+
+What is checked
+- OCR (ocr): Azure Storage (only for local PDFs) and Azure Content Understanding
+- Cleanup (clean): Azure OpenAI; if --translate-to is provided, also Translator
+- Full pipeline (convert/pipeline): Storage (for local PDFs), Content Understanding, Azure OpenAI; if --translate-to is provided, also Translator
+- Translate (translate): Azure Translator
+
+Behavior
+- On failure, the command aborts early with a clear error message and a non-zero exit code.
+- When --status-file is provided, preflight emits JSONL events: preflight_start, preflight_ok, preflight_failed with details.
+
+How to control it
+- CLI flags:
+  - --skip-azure-check: Skip preflight checks for the current run
+  - Translation quality guardrails:
+    - --allow-noop-translation: Allow output even if no paragraphs changed during translation
+    - --min-changed-ratio FLOAT: Minimum fraction of paragraphs that must change (0.0–1.0) for translation to be considered successful
+- INI settings (scan2epub.ini):
+  - [Diagnostics]
+    - skip_preflight = false
+  - [Translator]
+    - allow_noop = false
+    - min_changed_ratio = 0.0
+
+Examples
+- Full pipeline with preflight (default):
+  ```bash
+  scan2epub convert input.pdf output.epub --translate-to en
+  ```
+- Skip preflight (when you know services are up):
+  ```bash
+  scan2epub convert input.pdf output.epub --translate-to en --skip-azure-check
+  ```
+- Require at least 10% of paragraphs to change during translation:
+  ```bash
+  scan2epub translate input.epub output.en.epub --to en --min-changed-ratio 0.1
+  ```
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
