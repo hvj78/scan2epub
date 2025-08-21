@@ -255,5 +255,6 @@ Recent Updates (August 21, 2025)
 - Added unit tests for Translator preflight (single-attempt ping and error handling), translation no-op guard and min_changed_ratio enforcement, pipeline hard-stop on translator preflight failure, and AppConfig env var resolution for Azure OpenAI deployment.
 - Added pytest to requirements and test scaffolding (tests/conftest.py).
 - Updated Memory Bank (activeContext.md) with testing summary and how to run tests.
+- Updated website to document new Translation capabilities: added Translation section, nav link, CLI examples, and SEO metadata.
 
 *Last Updated: August 21, 2025*

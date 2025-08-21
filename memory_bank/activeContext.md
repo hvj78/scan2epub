@@ -34,6 +34,14 @@
 - Documented all current limitations and workarounds
 - Established clear roadmap for community contributions
 
+### Website Updates (August 21, 2025) - COMPLETED ✅
+- Website updated to include new Translation capabilities:
+  - Added "Translation" feature in Key features
+  - Added Quick Start commands for translate/convert/clean with translation
+  - Added dedicated "Translation" section with prerequisites, examples, and notes
+  - Added navigation link to "Translation" section
+- Content synchronized with README translation section and CLI options (--allow-noop-translation, --min-changed-ratio)
+
 ## Next Steps
 
 ### Immediate Tasks
