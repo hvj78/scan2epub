@@ -11,20 +11,20 @@
 - Retained valuable context files: 03_azure_configuration.md, 04_usage_guide.md
 
 ### Project Status
-- **Version**: 0.1.0 (per pyproject.toml; functional with Azure dependency)
-- **State**: Production-ready for Hungarian text processing for limited use
-- **Primary Use**: Author's family actively using for book conversion
-- **Next Priority**: Local AI model support to eliminate Azure costs
+- Version: 0.1.0 (per pyproject.toml; functional with Azure dependency)
+- State: Production-ready for Hungarian text processing for limited use
+- Primary Use: Author's family actively using for book conversion
+- Next Priority: Local AI model support to eliminate Azure costs
 
 ## Recent Changes
 
 ### File Structure Updates
-1. **Cline Configuration Files Moved**:
+1. Cline Configuration Files Moved:
    - `.clinerules` moved from `docs/` to root
    - `.clineignore` moved from `docs/` to root
    - Updated all documentation to reflect new structure
 
-2. **Memory Bank Created**:
+2. Memory Bank Created:
    - Comprehensive documentation following .clinerules specification
    - Core files establishing project foundation
    - Additional context files for detailed information
@@ -37,12 +37,12 @@
 ## Next Steps
 
 ### Immediate Tasks
-1. **Validate Memory Bank Structure**: ✅ COMPLETED
+1. Validate Memory Bank Structure: ✅ COMPLETED
    - Ensure all core files follow .clinerules guidelines ✅
    - Create progress.md to track project evolution ✅
    - Remove old numbered documentation files ✅
 
-2. **Test Current Implementation**:
+2. Test Current Implementation:
    - Verify Azure services are properly configured (use `scan2epub azure-test`)
    - Process a sample Hungarian book via new CLI:
      - `scan2epub ocr <input.pdf> <raw.epub>`
@@ -51,17 +51,17 @@
    - Document any new issues discovered
 
 ### Short-term Goals
-1. **Local OCR Research**:
+1. Local OCR Research:
    - Investigate Tesseract integration
    - Test PaddleOCR for Hungarian support
    - Create proof-of-concept for local processing
 
-2. **Memory Optimization**:
+2. Memory Optimization:
    - Profile memory usage during large book processing
    - Implement streaming where possible
    - Optimize chunk size calculations
 
-3. **Azure Blob UX improvements**:
+3. Azure Blob UX improvements:
    - Better error messages for connection string issues (AccountKey padding, length hints)
    - Auto-create container if missing (already implemented)
    - Optional automatic cleanup toggled via INI (Cleanup section)
@@ -69,22 +69,22 @@
 ## Active Decisions and Considerations
 
 ### Architecture Decisions
-1. **Keep Azure as Primary**: Until local alternatives prove viable
-2. **Maintain Backward Compatibility**: Don't break existing workflows
-3. **Prioritize Hungarian**: Continue optimization for primary use case
+1. Keep Azure as Primary: Until local alternatives prove viable
+2. Maintain Backward Compatibility: Don't break existing workflows
+3. Prioritize Hungarian: Continue optimization for primary use case
 
 ### Technical Considerations
-1. **Memory Management**:
+1. Memory Management:
    - Current --save-interim flag is a workaround, not a solution
    - Need proper streaming implementation
    - Consider chunked EPUB reading/writing
 
-2. **Error Handling**:
+2. Error Handling:
    - Current graceful degradation works but could be smarter
    - Need better error messages for common issues
    - Consider recovery mechanisms for partial failures
 
-3. **Input Handling**:
+3. Input Handling:
    - Local PDF paths now supported via Azure Blob upload → SAS URL bridge
    - Ensure `AZURE_STORAGE_CONNECTION_STRING` present; provide actionable diagnostics
 
@@ -111,16 +111,16 @@
 ## Learnings and Project Insights
 
 ### What Works Well
-1. **Two-stage pipeline**: Clean separation of concerns
-2. **Hungarian optimization**: Excellent results for target language
-3. **Azure integration**: Reliable when properly configured
-4. **Progress indication**: Users appreciate feedback
+1. Two-stage pipeline: Clean separation of concerns
+2. Hungarian optimization: Excellent results for target language
+3. Azure integration: Reliable when properly configured
+4. Progress indication: Users appreciate feedback
 
 ### Pain Points
-1. **PDF URL requirement**: Major friction for users
-2. **Azure costs**: Expensive for large books
-3. **Memory usage**: Problematic for book collections
-4. **Setup complexity**: Azure configuration is challenging
+1. PDF URL requirement: Major friction for users
+2. Azure costs: Expensive for large books
+3. Memory usage: Problematic for book collections
+4. Setup complexity: Azure configuration is challenging
 
 ### User Feedback
 - Family members successfully using the tool
@@ -129,22 +129,22 @@
 - Need for better error messages
 
 ### Technical Insights
-1. **Chunking is critical**: Text must respect paragraph boundaries
-2. **Hungarian hyphenation**: More complex than initially thought
-3. **EPUB structure**: Varies significantly between sources
-4. **API rate limits**: Real constraint for large books
+1. Chunking is critical: Text must respect paragraph boundaries
+2. Hungarian hyphenation: More complex than initially thought
+3. EPUB structure: Varies significantly between sources
+4. API rate limits: Real constraint for large books
 
 ## Current Blockers
 
 ### Technical Blockers
-1. **Azure Dependency**: Prevents wider adoption due to cost
-2. **URL Requirement**: Adds friction to user workflow
-3. **Memory Limitations**: Can't process very large books reliably
+1. Azure Dependency: Prevents wider adoption due to cost
+2. URL Requirement: Adds friction to user workflow
+3. Memory Limitations: Can't process very large books reliably
 
 ### Resource Blockers
-1. **Development Time**: Hobby project with limited time
-2. **Testing Resources**: Need diverse PDF samples
-3. **Azure Costs**: Expensive to test extensively
+1. Development Time: Hobby project with limited time
+2. Testing Resources: Need diverse PDF samples
+3. Azure Costs: Expensive to test extensively
 
 ## Context for Next Session
 
@@ -156,3 +156,31 @@ When returning to this project:
 5. Update progress.md with findings and adjust roadmap
 
 Remember: The primary goal is helping the family read books on their ONYX readers. All decisions should support this goal while making the tool useful for others.
+
+---
+
+## Automated Tests and Fail-fast Translation Guardrails (August 21, 2025) - COMPLETED ✅
+
+Scope:
+- Added unit tests to validate the new Translation stage, preflight behavior, and no-op guard.
+- Ensured AppConfig resolves Azure OpenAI deployment from AZURE_OPENAI_DEPLOYMENT_NAME.
+
+Key changes:
+- Config:
+  - src/scan2epub/config.py: deployment resolved via AZURE_OPENAI_DEPLOYMENT_NAME.
+- Tests (pytest added to requirements.txt):
+  - tests/test_openai_env_resolution.py — verifies env var name compatibility.
+  - tests/test_translator_preflight.py — verifies AzureTranslator.preflight_check does exactly one POST, handles 404 and malformed response, and sets Region header when provided.
+  - tests/test_epub_translation_noop_guard.py — verifies no-op translation raises TranslationError by default with translate_noop status event, allow_noop override, and min_changed_ratio enforcement.
+  - tests/test_pipeline_translate_preflight_abort.py — verifies pipeline.run_translate hard-stops on preflight failure; PreflightChecker emits preflight_start and translator_failed to status JSONL on failure.
+- Tooling:
+  - requirements.txt: added pytest>=7.0.0.
+  - tests/conftest.py: ensures src/ is on sys.path.
+
+How to run:
+- pip install -r requirements.txt
+- pytest -q
+
+Notes:
+- No external network is used in unit tests; Translator and preflight behavior are mocked/stubbed.
+- Tests build tiny synthetic EPUBs with ebooklib and exercise the end-to-end translation write path when allowed by guardrails.

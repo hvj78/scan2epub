@@ -251,4 +251,9 @@ From the previous Summary Implementation Order, the following items remain to be
 
 ---
 
-*Last Updated: August 4, 2025*
+Recent Updates (August 21, 2025)
+- Added unit tests for Translator preflight (single-attempt ping and error handling), translation no-op guard and min_changed_ratio enforcement, pipeline hard-stop on translator preflight failure, and AppConfig env var resolution for Azure OpenAI deployment.
+- Added pytest to requirements and test scaffolding (tests/conftest.py).
+- Updated Memory Bank (activeContext.md) with testing summary and how to run tests.
+
+*Last Updated: August 21, 2025*
